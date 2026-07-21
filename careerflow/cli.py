@@ -12,6 +12,7 @@ from .core import (
     draft_application,
     prepare_interview,
     record_review,
+    slugify,
 )
 
 
@@ -25,6 +26,11 @@ def parser() -> argparse.ArgumentParser:
     user.add_argument("--profile", type=Path, required=True)
     user.add_argument("--resume", type=Path)
 
+    inspect = sub.add_parser("template-inspect", help="Register and inspect a private PDF or DOCX resume template")
+    inspect.add_argument("--user", required=True)
+    inspect.add_argument("--source", type=Path, required=True)
+    inspect.add_argument("--template-id", default="default")
+
     apply = sub.add_parser("apply", help="Create one isolated application branch")
     apply.add_argument("--user", required=True)
     apply.add_argument("--company", required=True)
@@ -34,6 +40,10 @@ def parser() -> argparse.ArgumentParser:
     draft = sub.add_parser("draft", help="Create resume, cover letter and evidence map")
     draft.add_argument("--application", required=True)
     draft.add_argument("--provider", choices=["rules", "openai"], default="rules")
+
+    plan = sub.add_parser("template-plan", help="Create an original-format replacement plan for agent completion")
+    plan.add_argument("--application", required=True)
+    plan.add_argument("--template-id", default="default")
 
     approve = sub.add_parser("approve", help="Lock user-approved drafts")
     approve.add_argument("--application", required=True)
@@ -64,10 +74,25 @@ def main(argv=None) -> int:
             print(workspace.bootstrap())
         elif args.command == "user-add":
             print(workspace.add_user(args.profile, args.resume))
+        elif args.command == "template-inspect":
+            from .document_engine import inspect_document
+            workspace.profile(args.user)
+            template_id = slugify(args.template_id)
+            destination = workspace.user_dir(args.user) / "templates" / template_id
+            print(inspect_document(args.source, destination, template_id))
         elif args.command == "apply":
             print(workspace.create_application(args.user, args.company, args.role, args.jd))
         elif args.command == "draft":
             print(draft_application(workspace, args.application, args.provider))
+        elif args.command == "template-plan":
+            from .document_engine import create_plan
+            app_dir = workspace.find_application(args.application)
+            meta = workspace.meta(app_dir)
+            if meta["stage"] != "drafted":
+                raise CareerFlowError("Create the document plan after drafting and before approval.")
+            template_id = slugify(args.template_id)
+            template_dir = workspace.user_dir(meta["user_id"]) / "templates" / template_id
+            print(create_plan(template_dir, app_dir / "draft" / "document-plan.json"))
         elif args.command == "approve":
             print(approve_application(workspace, args.application, args.confirmed_by))
         elif args.command == "build":

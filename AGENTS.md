@@ -25,6 +25,7 @@ application:
   - company name
   - role name
   - complete JD body
+  - registered PDF or DOCX template for original-format output
 interview:
   - application stage is built
   - user explicitly reports an interview or requests preparation
@@ -53,13 +54,14 @@ created -> drafted -> approved -> built -> interviewing -> closed
 1. Treat structured profile facts as the only permitted applicant evidence.
 2. Generate resume, Cover Letter and evidence map as one review package.
 3. Stop after drafting and present the complete review package to the user.
-4. Run `approve` and `build` only after explicit user approval.
-5. Start interview research only when the interview condition is met.
-6. Separate verified company facts, reasoned inference and unknowns; cite current company-specific claims.
-7. Build interview questions from both JD requirements and the approved resume.
-8. Preserve the user's first-hand review notes, then classify them; do not replace them with generic coaching language.
-9. Keep the job-specific review and aggregate review synchronized.
-10. Before public commits, run tests and `python scripts/privacy_check.py`, then inspect the staged diff.
+4. For PDF/DOCX users, create `document-plan.json` from inspected region IDs. Do not edit the source with an unrelated tool.
+5. Run `approve` and `build` only after explicit approval of content and the document plan.
+6. Start interview research only when the interview condition is met.
+7. Separate verified company facts, reasoned inference and unknowns; cite current company-specific claims.
+8. Build interview questions from both JD requirements and the approved resume.
+9. Preserve the user's first-hand review notes, then classify them; do not replace them with generic coaching language.
+10. Keep the job-specific review and aggregate review synchronized.
+11. Before public commits, run tests and `python scripts/privacy_check.py`, then inspect the staged diff.
 
 ## STOP_CONDITIONS
 
@@ -69,7 +71,7 @@ Stop and request user input when:
 - the JD is incomplete;
 - a material resume claim lacks evidence;
 - resume or Cover Letter approval is not explicit;
-- a proprietary layout must be preserved but no private renderer exists;
+- a scanned PDF has no trustworthy text layer or OCR mapping;
 - online research is requested without an available provider or network access.
 
 ## DONE_DEFINITION
@@ -84,9 +86,9 @@ An application stage is complete only when:
 - research includes sources or is clearly labeled as an unverified offline framework;
 - review is present in both the application and aggregate summary.
 
-## PDF_BOUNDARY
+## DOCUMENT_EDITOR_BOUNDARY
 
-CareerFlow creates a new document from approved structured content. It does not promise lossless editing of arbitrary PDFs. Exact preservation of a proprietary layout requires a user-specific adapter stored outside the public repository. Always inspect the rendered PDF visually.
+CareerFlow includes a controlled PDF/DOCX editor. Use `template-inspect` and `template-plan`; do not call an unrelated editor. The engine preserves the uploaded structure and edits only approved regions. Always inspect rendered output visually.
 
 ## NEVER_COMMIT
 

@@ -18,9 +18,10 @@ careerflow/                           ~/.careerflow/ (default)
 2. **Application layer** creates an isolated directory for each company-role pair and tracks its stage.
 3. **Drafting layer** produces a resume, cover letter, and evidence map. `rules` is deterministic and offline; `openai` performs deeper semantic tailoring.
 4. **Approval layer** hashes all reviewed drafts. Build fails if content changes afterward.
-5. **Output layer** creates Markdown, HTML, a manifest, and optionally PDF.
-6. **Interview layer** starts only after the application package is built. Online mode researches current company information; offline mode produces a source ledger and question framework without pretending it performed research.
-7. **Review layer** stores job-specific feedback and synchronizes categorized learning to a cross-application summary.
+5. **Document adapter layer** inspects each uploaded PDF/DOCX and stores private region, typography, capacity and source-hash metadata.
+6. **Output layer** creates Markdown/HTML and invokes the packaged editor to write approved content into the registered original format.
+7. **Interview layer** starts only after the application package is built. Online mode researches current company information; offline mode produces a source ledger and question framework without pretending it performed research.
+8. **Review layer** stores job-specific feedback and synchronizes categorized learning to a cross-application summary.
 
 ## State machine
 
@@ -44,6 +45,6 @@ The core has no mandatory cloud dependency. The OpenAI provider calls the Respon
 - The release privacy scanner detects common secrets, user paths, email addresses, and phone numbers.
 - Public examples use fictional organizations and the reserved `.invalid` email domain.
 
-## PDF boundary
+## Document editor boundary
 
-Arbitrary PDFs do not share a reliable editable schema. The reusable system therefore generates a new layout from structured, approved content. Exact edits to a locked personal design require a separate per-user adapter and visual QA; such adapters belong in the private workspace, not this repository.
+The editor core is public and shared; document parameters are private and generated per uploaded resume. PDF replacement uses inspected line rectangles, typography, width limits, searchable-text validation and masked visual diffs. DOCX replacement edits OOXML paragraphs in place. Agents prepare declarative replacement plans but do not implement file mutations themselves.

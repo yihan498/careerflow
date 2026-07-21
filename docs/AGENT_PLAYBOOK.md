@@ -28,6 +28,7 @@
 3. 将未确认信息标为缺口，不得补写。
 4. 让用户确认结构化 profile。
 5. 执行 `careerflow user-add`。
+6. PDF/DOCX 会自动生成 `templates/default/document-profile.json`；检查区域识别结果和基准预览。
 
 ### 完成标志
 
@@ -66,9 +67,11 @@
 - `evidence-map.md` 是否能追溯主要表述；
 - 硬性要求中的未知项是否保持为未知。
 
+如果存在原始 PDF/DOCX，执行 `careerflow template-plan`，读取 `document-profile.json` 的区域编号，把新文案拆分到原有行或段落中。PDF 每个区域必须保持单行且不超过 `max_width`。Agent 不得自行调用其他文件编辑工具绕过内置编辑器。
+
 ### 强制暂停点
 
-把三份文件完整交给用户。只有用户明确批准三者，才能执行：
+把三份内容文件和 `document-plan.json` 完整交给用户。只有用户明确批准全部材料，才能执行：
 
 ```text
 careerflow approve ...
@@ -79,7 +82,7 @@ careerflow build ...
 
 ### 构建后检查
 
-检查 manifest 和全部输出；打开 PDF 渲染结果，确认无重叠、截断、缺字、旧文字残留和异常分页。
+检查 manifest 和全部输出；PDF 必须检查原图、最终图和区域外差异图。DOCX 必须在 Word 或 LibreOffice 中渲染检查。具体标准见 `docs/DOCUMENT_EDITOR.md`。
 
 ## 4. 面试准备
 

@@ -107,8 +107,14 @@ class Workspace:
         evidence = self._build_evidence(profile)
         write_json(user_dir / "profile" / "evidence.json", evidence)
         if resume_file:
-            read_text(resume_file)
+            if resume_file.suffix.lower() in {".md", ".txt"}:
+                read_text(resume_file)
+            elif resume_file.suffix.lower() not in {".pdf", ".docx"}:
+                raise CareerFlowError("Source resume must be .md, .txt, .pdf or .docx.")
             shutil.copy2(str(resume_file), str(user_dir / "profile" / ("source-resume" + resume_file.suffix.lower())))
+            if resume_file.suffix.lower() in {".pdf", ".docx"}:
+                from .document_engine import inspect_document
+                inspect_document(resume_file, user_dir / "templates" / "default", "default")
         return user_dir
 
     @staticmethod
@@ -299,6 +305,9 @@ def draft_application(workspace: Workspace, app_id: str, provider: str) -> Path:
         raise CareerFlowError("Unknown provider: %s" % provider)
     for name, content in drafts.items():
         (app_dir / "draft" / name).write_text(content.strip() + "\n", encoding="utf-8")
+    stale_plan = app_dir / "draft" / "document-plan.json"
+    if stale_plan.exists():
+        stale_plan.unlink()
     workspace.transition(app_dir, "drafted", {"created", "drafted"})
     return app_dir
 
@@ -308,9 +317,22 @@ def approve_application(workspace: Workspace, app_id: str, confirmed_by: str) ->
     meta = workspace.meta(app_dir)
     if meta["stage"] != "drafted":
         raise CareerFlowError("Only a drafted application can be approved.")
-    files = list((app_dir / "draft").glob("*.md"))
-    if len(files) != 3:
+    required = [app_dir / "draft" / name for name in ("resume.md", "cover-letter.md", "evidence-map.md")]
+    if not all(path.exists() for path in required):
         raise CareerFlowError("Resume, cover letter and evidence map are all required.")
+    template_root = workspace.user_dir(meta["user_id"]) / "templates"
+    registered_templates = list(template_root.glob("*/document-profile.json")) if template_root.exists() else []
+    document_plan = app_dir / "draft" / "document-plan.json"
+    if registered_templates and not document_plan.exists():
+        raise CareerFlowError("An original PDF/DOCX is registered. Create and review document-plan.json before approval.")
+    if document_plan.exists():
+        from .document_engine import validate_document_plan
+        plan = load_json(document_plan)
+        template_id = str(plan.get("template_id", ""))
+        if not template_id or slugify(template_id) != template_id:
+            raise CareerFlowError("Document plan contains an unsafe template ID.")
+        validate_document_plan(template_root / template_id, document_plan)
+    files = list((app_dir / "draft").glob("*.md")) + list((app_dir / "draft").glob("*.json"))
     write_json(app_dir / "approval.json", {
         "confirmed_by": confirmed_by,
         "confirmed_at": utc_now(),
@@ -354,7 +376,7 @@ def build_application(workspace: Workspace, app_id: str, no_pdf: bool = False) -
     if meta["stage"] != "approved":
         raise CareerFlowError("Build requires explicit approval.")
     approval = load_json(app_dir / "approval.json")
-    files = list((app_dir / "draft").glob("*.md"))
+    files = list((app_dir / "draft").glob("*.md")) + list((app_dir / "draft").glob("*.json"))
     if approval["draft_sha256"] != sha256_files(files):
         raise CareerFlowError("Draft changed after approval. Draft and approve again.")
     output = app_dir / "output"
@@ -368,11 +390,22 @@ def build_application(workspace: Workspace, app_id: str, no_pdf: bool = False) -
         from .pdf_export import export_pdf
         export_pdf(resume, output / "resume.pdf")
         pdf_status = "created"
+    document_plan = app_dir / "draft" / "document-plan.json"
+    original_format_result = None
+    if document_plan.exists():
+        from .document_engine import apply_document
+        plan = load_json(document_plan)
+        template_id = str(plan.get("template_id", ""))
+        if not template_id or slugify(template_id) != template_id:
+            raise CareerFlowError("Document plan contains an unsafe template ID.")
+        template_dir = workspace.user_dir(meta["user_id"]) / "templates" / template_id
+        original_format_result = str(apply_document(template_dir, document_plan, output).name)
     write_json(output / "manifest.json", {
         "application_id": app_id,
         "built_at": utc_now(),
         "approved_draft_sha256": approval["draft_sha256"],
         "pdf": pdf_status,
+        "original_format_result": original_format_result,
         "files": sorted(path.name for path in output.iterdir()),
     })
     workspace.transition(app_dir, "built", {"approved"})

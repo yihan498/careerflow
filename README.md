@@ -22,7 +22,7 @@ CareerFlow 的重点不是一次生成一份简历，而是把每个岗位作为
 - 与 JD 对齐的简历草稿；
 - Cover Letter；
 - “每一项表述来自哪段真实经历”的证据映射；
-- 经用户确认后生成的 Markdown、HTML 和 PDF；
+- 经用户确认后生成的 Markdown、HTML，以及保留原格式的 PDF 或 DOCX；
 - 收到面试后的公司、业务、岗位和流程调研；
 - 结合最终简历生成的面试追问和回答框架；
 - 该岗位的复盘记录；
@@ -32,12 +32,12 @@ CareerFlow 的重点不是一次生成一份简历，而是把每个岗位作为
 
 首次使用需要：
 
-1. 一份完整原始简历；
+1. 一份完整原始简历，支持 PDF 或 DOCX；
 2. 一份结构化个人资料，包含已确认的教育、经历、日期、行动、数据和结果；
 3. 每次申请的完整 JD；
 4. 如需 AI 深度改写和联网公司调研，需要使用者自己的 OpenAI API Key。
 
-如果原始简历是 PDF 或 Word，Agent 应先提取内容、对照原文件检查，再让用户确认关键事实。示例结构见 [`examples/demo/profile.json`](examples/demo/profile.json)，完整说明见 [`docs/USER_ONBOARDING.md`](docs/USER_ONBOARDING.md)。
+上传 PDF 或 Word 后，内置编辑器会自动识别文档区域并建立该用户自己的模板配置；Agent 不需要另外寻找 PDF/Word 编辑工具。示例结构见 [`examples/demo/profile.json`](examples/demo/profile.json)，完整说明见 [`docs/USER_ONBOARDING.md`](docs/USER_ONBOARDING.md)。
 
 ## 安装
 
@@ -54,11 +54,11 @@ python -m venv .venv
 ```bash
 # Windows
 .venv\Scripts\activate
-pip install -e ".[dev]"
+pip install -e ".[documents,dev]"
 
 # macOS / Linux
 source .venv/bin/activate
-pip install -e ".[dev]"
+pip install -e ".[documents,dev]"
 ```
 
 ## 先运行虚构示例
@@ -78,7 +78,7 @@ python scripts/privacy_check.py
 ```powershell
 $env:CAREERFLOW_HOME = "D:\private-careerflow"
 careerflow bootstrap
-careerflow user-add --profile D:\private-input\profile.json --resume D:\private-input\resume.md
+careerflow user-add --profile D:\private-input\profile.json --resume D:\private-input\resume.pdf
 ```
 
 个人资料只初始化一次。不同使用者必须使用不同的用户 ID 和目录，不能共享证据库。
@@ -98,6 +98,8 @@ careerflow draft `
 ```
 
 系统会同时生成 `resume.md`、`cover-letter.md` 和 `evidence-map.md`。Agent 必须把三份草稿完整交给用户检查，不能自行推定用户同意。
+
+如果用户上传的是 PDF 或 DOCX，Agent 还需执行 `careerflow template-plan`，按照自动识别的区域编号填写 `document-plan.json`。替换计划必须和三份内容一起获得用户批准；构建时统一由项目内置编辑器写回原文件格式。
 
 用户明确同意后：
 
@@ -151,14 +153,23 @@ Agent 的输入契约、允许动作、停止条件和完成标准都写在 [`AG
 - `rules`：完全离线、可测试，只重排已确认事实并生成标准框架，适合验证流程。
 - `openai`：根据 JD 做语义匹配；面试阶段可联网搜索公司信息。通过环境变量提供 `OPENAI_API_KEY`，请求设置 `store: false`。
 
-## 关于 PDF
+## 原格式编辑器
 
-CareerFlow 从已批准的结构化内容生成新 PDF，不宣称能无损编辑所有任意 PDF——不同 PDF 没有统一的可编辑字段和排版协议。如果必须保留某个专有模板，可在私人工作区添加该用户的渲染适配器，其他证据、审批、面试和复盘流程不需要改变。
+项目已经内置 PDF/DOCX 编辑器，不把写回工作交给各个 Agent 自由处理：
+
+- PDF 自动识别文字区域、坐标、字号、颜色和可用行宽，按批准区域原位替换，并检查区域外页面没有变化。
+- DOCX 直接修改原 OOXML 段落，保留文档结构、样式、表格、图片、页眉和页脚。
+- 源文件和替换计划均通过哈希锁定；发生变化后必须重新确认。
+- PDF 自动输出最终渲染图和区域外差异图；Word 输出必须在 Word 或 LibreOffice 中再次渲染检查。
+- 没有文字层的扫描 PDF 会被识别并停止，不能伪装成可安全编辑的模板。
+
+详细协议见 [`docs/DOCUMENT_EDITOR.md`](docs/DOCUMENT_EDITOR.md)。
 
 ## 文档导航
 
 - [`AGENTS.md`](AGENTS.md)：Agent 必须遵守的执行契约；
 - [`docs/AGENT_PLAYBOOK.md`](docs/AGENT_PLAYBOOK.md)：Agent 分阶段操作手册；
+- [`docs/DOCUMENT_EDITOR.md`](docs/DOCUMENT_EDITOR.md)：PDF/DOCX 原格式编辑器；
 - [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md)：整体架构和数据边界；
 - [`docs/USER_ONBOARDING.md`](docs/USER_ONBOARDING.md)：新使用者初始化；
 - [`docs/QUALITY_STANDARD.md`](docs/QUALITY_STANDARD.md)：每一步的合格标准；

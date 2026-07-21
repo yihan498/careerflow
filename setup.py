@@ -5,7 +5,7 @@ from setuptools import find_packages, setup
 
 setup(
     name="careerflow-kit",
-    version="0.1.0",
+    version="0.2.0",
     description="Privacy-first end-to-end job application workflow",
     packages=find_packages(),
     package_data={"careerflow": ["prompts/*.md"]},
@@ -13,7 +13,8 @@ setup(
     python_requires=">=3.8",
     extras_require={
         "pdf": ["reportlab>=4.0"],
-        "dev": ["pytest>=7.0", "reportlab>=4.0"],
+        "documents": ["reportlab>=4.0", "PyMuPDF>=1.24,<2", "Pillow>=9.0"],
+        "dev": ["pytest>=7.0", "reportlab>=4.0", "PyMuPDF>=1.24,<2", "Pillow>=9.0"],
     },
     entry_points={"console_scripts": ["careerflow=careerflow.cli:main"]},
 )

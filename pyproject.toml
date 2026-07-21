@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "careerflow-kit"
-version = "0.1.0"
+version = "0.2.0"
 description = "A privacy-first, agent-readable workflow for job applications from resume tailoring to interview review."
 readme = "README.md"
 requires-python = ">=3.8"
@@ -19,7 +19,8 @@ classifiers = [
 
 [project.optional-dependencies]
 pdf = ["reportlab>=4.0"]
-dev = ["pytest>=7.0", "reportlab>=4.0"]
+documents = ["reportlab>=4.0", "PyMuPDF>=1.24,<2", "Pillow>=9.0"]
+dev = ["pytest>=7.0", "reportlab>=4.0", "PyMuPDF>=1.24,<2", "Pillow>=9.0"]
 
 [project.scripts]
 careerflow = "careerflow.cli:main"

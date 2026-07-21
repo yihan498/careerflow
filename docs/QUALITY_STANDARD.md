@@ -28,3 +28,6 @@
 - Verify headings, content and manifests, not only file existence.
 - Visually inspect the final PDF for clipping, overlap, missing glyphs and awkward page breaks.
 - Never send a build whose approved-content hash no longer matches.
+- For an uploaded PDF/DOCX, use the packaged original-format editor and include `document-plan.json` in approval.
+- PDF replacements must fit the inspected line capacity and pass searchable-text and outside-region visual-diff checks.
+- DOCX replacements must preserve the OOXML package and be rendered in Word or LibreOffice before delivery.

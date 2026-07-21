@@ -1,0 +1,32 @@
+{
+  "id": "demo-candidate",
+  "display_name": "Alex Chen",
+  "headline": "Economics student focused on data-informed product operations",
+  "contact": {"email": "alex@example.invalid"},
+  "education": [
+    {"school": "Example University", "program": "B.A. Economics", "period": "2023-2027"}
+  ],
+  "experiences": [
+    {
+      "id": "market-research",
+      "organization": "Northwind Research Club",
+      "role": "Research Assistant",
+      "period": "2025",
+      "bullets": [
+        "Structured 180 public product reviews into a reusable taxonomy and summarized recurring user needs.",
+        "Built a spreadsheet dashboard that reduced weekly manual reporting time from three hours to one hour."
+      ]
+    },
+    {
+      "id": "campus-product",
+      "organization": "Example Campus Lab",
+      "role": "Product Operations Volunteer",
+      "period": "2024-2025",
+      "bullets": [
+        "Interviewed 24 student users, documented onboarding friction, and prioritized five workflow improvements.",
+        "Coordinated two release feedback rounds and maintained a decision log for the project team."
+      ]
+    }
+  ],
+  "skills": ["Excel", "SQL", "Python", "English", "Mandarin"]
+}

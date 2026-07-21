@@ -1,0 +1,3 @@
+# Product Operations Intern
+
+Northstar Labs is seeking a Product Operations Intern to support user research, operational data analysis, reporting, and cross-functional product iteration. The intern will organize user feedback, maintain recurring dashboards, identify workflow issues, document requirements, and coordinate follow-up with product and engineering partners. Candidates should demonstrate structured problem solving, clear written communication, spreadsheet proficiency, and comfort using SQL or Python. Experience conducting interviews or supporting a product release is preferred. The role requires careful handling of evidence and an ability to distinguish observations from assumptions.

@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "careerflow-kit"
+version = "0.1.0"
+description = "A privacy-first, agent-readable workflow for job applications from resume tailoring to interview review."
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [{name = "CareerFlow contributors"}]
+keywords = ["career", "resume", "interview", "job-search", "workflow"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+]
+
+[project.optional-dependencies]
+pdf = ["reportlab>=4.0"]
+dev = ["pytest>=7.0", "reportlab>=4.0"]
+
+[project.scripts]
+careerflow = "careerflow.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["careerflow*"]
+
+[tool.setuptools.package-data]
+careerflow = ["prompts/*.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

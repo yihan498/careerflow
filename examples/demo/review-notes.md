@@ -1,0 +1,1 @@
+The interviewer asked for a clearer explanation of my individual contribution to the campus product project. My answer mixed team results with my own work, so I should separate context, action, evidence and reflection next time.

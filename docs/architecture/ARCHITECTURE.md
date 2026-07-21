@@ -24,6 +24,10 @@ careerflow/                           ~/.careerflow/ (default)
 8. **Interview layer** starts only after the application package is built. Online mode researches current company information; offline mode produces a source ledger and question framework without pretending it performed research.
 9. **Review layer** stores job-specific feedback and synchronizes categorized learning to a cross-application summary.
 
+## Control plane
+
+Every stage separates three authorities: deterministic process (`P`), bounded agent judgment (`A`) and human decision (`H`). Agent output is never sent directly to a mutation or external-action layer. It first passes a structural contract, then any required human gate, and only then may deterministic code update files, state or external systems. See [`../CONTROL_BOUNDARIES.md`](../CONTROL_BOUNDARIES.md).
+
 ## State machine
 
 ```text

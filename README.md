@@ -201,6 +201,7 @@ Agent 的输入契约、允许动作、停止条件和完成标准都写在 [`AG
 ## 文档导航
 
 - [`AGENTS.md`](AGENTS.md)：Agent 必须遵守的执行契约；
+- [`docs/CONTROL_BOUNDARIES.md`](docs/CONTROL_BOUNDARIES.md)：固定流程、Agent 受限发挥和人工决定的严格分界；
 - [`docs/AGENT_PLAYBOOK.md`](docs/AGENT_PLAYBOOK.md)：Agent 分阶段操作手册；
 - [`docs/DOCUMENT_EDITOR.md`](docs/DOCUMENT_EDITOR.md)：PDF/DOCX 原格式编辑器；
 - [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md)：整体架构和数据边界；

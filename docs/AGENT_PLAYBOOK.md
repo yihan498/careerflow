@@ -7,11 +7,14 @@
 读取顺序：
 
 1. `AGENTS.md`
-2. `docs/QUALITY_STANDARD.md`
-3. `docs/USER_ONBOARDING.md`（首次使用者）
-4. 当前岗位的 `application.json`（已有岗位）
+2. `docs/CONTROL_BOUNDARIES.md`
+3. `docs/QUALITY_STANDARD.md`
+4. `docs/USER_ONBOARDING.md`（首次使用者）
+5. 当前岗位的 `application.json`（已有岗位）
 
 确认运行目录在代码仓库之外。若用户未指定，使用 `~/.careerflow`。不得扫描或引用其他求职项目、其他用户目录或历史私人案例。
+
+每次行动前先标记责任类型：P（程序固定动作）、A（Agent 受限判断）或 H（必须等待用户决定）。详细边界见 `docs/CONTROL_BOUNDARIES.md`。
 
 ## 1. 新用户初始化
 

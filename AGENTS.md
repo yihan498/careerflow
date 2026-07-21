@@ -1,6 +1,13 @@
 # CareerFlow Agent Contract
 
-本文件是强制执行契约，不是背景说明。开始任务前继续读取 `docs/AGENT_PLAYBOOK.md` 和 `docs/QUALITY_STANDARD.md`。
+本文件是强制执行契约，不是背景说明。开始任务前继续读取 `docs/CONTROL_BOUNDARIES.md`、`docs/AGENT_PLAYBOOK.md` 和 `docs/QUALITY_STANDARD.md`。
+
+## CONTROL_MODEL
+
+- `P / process`：状态、校验、哈希、文件写回、邮件发送和回执，只能由程序执行。
+- `A / bounded agent`：表达、相关性排序、研究综合、问题预测和复盘解释，只能在阶段输入与输出契约内进行。
+- `H / human decision`：事实确认、审批、收件人选择、发送决定、面试触发和真实结果，不得由 Agent 推断。
+- Agent 输出通过结构校验只表示“可供审阅”，绝不表示“已获批准”。
 
 ## SYSTEM_BOUNDARY
 

@@ -5,7 +5,7 @@ from setuptools import find_packages, setup
 
 setup(
     name="careerflow-kit",
-    version="0.3.0",
+    version="0.4.0",
     description="Privacy-first end-to-end job application workflow",
     packages=find_packages(),
     package_data={"careerflow": ["prompts/*.md"]},

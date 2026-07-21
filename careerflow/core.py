@@ -236,10 +236,17 @@ def render_rule_drafts(profile: Dict[str, Any], meta: Dict[str, Any], jd: str) -
     cover = "# Cover Letter\n\nDear Hiring Team,\n\nI am applying for the %s role at %s.\n\n%s\n\nSincerely,\n%s\n" % (
         meta["role"], meta["company"], "\n\n".join(body), profile["display_name"]
     )
-    mapping = ["# Evidence Map", "", "JD keywords: %s" % ", ".join(keywords), ""]
+    mapping = ["# Evidence Map", "", "## Claim Mapping", "", "JD keywords: %s" % ", ".join(keywords), ""]
     for exp in strongest:
         mapping.append("- **%s / %s**: %s" % (exp["organization"], exp["role"], exp["bullets"][0]))
-    mapping.append("\nAll claims above come from user-confirmed profile evidence. Rule mode reorders facts but does not invent new ones.\n")
+    mapping += [
+        "",
+        "## JD Gaps",
+        "",
+        "Rule mode does not infer unsupported requirements. Compare the complete JD with the confirmed profile during human review.",
+        "",
+        "All claims above come from user-confirmed profile evidence. Rule mode reorders facts but does not invent new ones.",
+    ]
     return {"resume.md": resume, "cover-letter.md": cover, "evidence-map.md": "\n".join(mapping)}
 
 
@@ -303,8 +310,20 @@ def draft_application(workspace: Workspace, app_id: str, provider: str) -> Path:
             raise CareerFlowError("Model output did not match the required JSON contract: %s" % exc)
     else:
         raise CareerFlowError("Unknown provider: %s" % provider)
+    from .contracts import CONTRACT_VERSION, validate_draft_bundle
+    try:
+        validate_draft_bundle(drafts)
+    except ValueError as exc:
+        raise CareerFlowError("Draft output failed the agent contract: %s" % exc) from exc
     for name, content in drafts.items():
         (app_dir / "draft" / name).write_text(content.strip() + "\n", encoding="utf-8")
+    write_json(app_dir / "draft" / "agent-output-contract.json", {
+        "contract_version": CONTRACT_VERSION,
+        "provider": provider,
+        "validated_at": utc_now(),
+        "artifacts": sorted(drafts),
+        "status": "structure_validated_human_approval_required",
+    })
     stale_plan = app_dir / "draft" / "document-plan.json"
     if stale_plan.exists():
         stale_plan.unlink()
@@ -317,6 +336,8 @@ def approve_application(workspace: Workspace, app_id: str, confirmed_by: str) ->
     meta = workspace.meta(app_dir)
     if meta["stage"] != "drafted":
         raise CareerFlowError("Only a drafted application can be approved.")
+    if not confirmed_by.strip():
+        raise CareerFlowError("Approval must identify who confirmed the complete review package.")
     required = [app_dir / "draft" / name for name in ("resume.md", "cover-letter.md", "evidence-map.md")]
     if not all(path.exists() for path in required):
         raise CareerFlowError("Resume, cover letter and evidence map are all required.")
@@ -433,11 +454,41 @@ def prepare_interview(workspace: Workspace, app_id: str, provider: str) -> Path:
             questions.append("- What exactly did you own in %s, and what evidence supports the result?" % exp["organization"])
         brief = """# Interview Preparation: {company} - {role}
 
-## Research boundary
+## 1. Evidence Boundary and Research Date
 
 Offline rule mode cannot verify current company facts. Complete the source ledger below or rerun with `--provider openai`. Missing sources must remain unknown, not negative evidence.
 
-## Company source ledger
+## 2. Company Overview
+
+[Unknown] Current company facts require online research.
+
+## 3. Relevant Business Workflow
+
+[Unknown] Map the verified workflow before treating any step as company-specific.
+
+## 4. JD Decomposition
+
+Priority JD terms: {keywords}
+
+## 5. Resume-to-Role Map
+
+Use only the confirmed profile and approved resume.
+
+## 6. Company and Role Questions
+
+- Walk through how you would approach the role's most important deliverable.
+- Which requirement is your strongest evidence match? Which is the largest gap?
+- Describe a relevant decision, trade-off, or failure and what changed afterward.
+
+## 7. Resume Follow-ups
+
+{questions}
+
+## 8. Mock Interview and Final Checklist
+
+Use: context -> task -> action -> evidence -> result -> reflection. Do not memorize unsupported claims.
+
+## 9. Source Ledger
 
 | Topic | Finding | Source URL | Published/updated | Confidence |
 |---|---|---|---|---|
@@ -445,28 +496,23 @@ Offline rule mode cannot verify current company facts. Complete the source ledge
 | Products and customers | TODO | TODO | TODO | unverified |
 | Recent developments | TODO | TODO | TODO | unverified |
 | Hiring team / process | TODO | TODO | TODO | unverified |
-
-## Role interpretation
-
-Priority JD terms: {keywords}
-
-## Resume questions
-
-{questions}
-
-## Role questions
-
-- Walk through how you would approach the role's most important deliverable.
-- Which requirement is your strongest evidence match? Which is the largest gap?
-- Describe a relevant decision, trade-off, or failure and what changed afterward.
-
-## Answer worksheet
-
-Use: context -> task -> action -> evidence -> result -> reflection. Do not memorize unsupported claims.
 """.format(company=meta["company"], role=meta["role"], keywords=", ".join(keywords), questions="\n".join(questions))
+    from .contracts import CONTRACT_VERSION, validate_interview_brief
+    try:
+        validate_interview_brief(brief, require_sources=provider == "openai")
+    except ValueError as exc:
+        raise CareerFlowError("Interview output failed the agent contract: %s" % exc) from exc
     path = app_dir / "interview" / "interview-brief.md"
     path.write_text(brief.strip() + "\n", encoding="utf-8")
-    workspace.transition(app_dir, "interviewing", {"built", "interviewing"})
+    write_json(app_dir / "interview" / "manifest.json", {
+        "contract_version": CONTRACT_VERSION,
+        "provider": provider,
+        "validated_at": utc_now(),
+        "source_urls_required": provider == "openai",
+        "brief_sha256": hashlib.sha256((brief.strip() + "\n").encode("utf-8")).hexdigest(),
+        "status": "structure_validated_human_review_required",
+    })
+    workspace.transition(app_dir, "interviewing", {"built", "submitted", "interviewing"})
     return path
 
 
@@ -475,6 +521,8 @@ def record_review(workspace: Workspace, app_id: str, outcome: str, notes_file: P
     meta = workspace.meta(app_dir)
     if meta["stage"] not in {"built", "submitted", "interviewing", "closed"}:
         raise CareerFlowError("Review is only available after the application package was built.")
+    if outcome not in {"rejected", "withdrew", "offer", "pending"}:
+        raise CareerFlowError("Review outcome must be rejected, withdrew, offer or pending.")
     notes = read_text(notes_file).strip()
     if not notes:
         raise CareerFlowError("Review notes cannot be empty.")

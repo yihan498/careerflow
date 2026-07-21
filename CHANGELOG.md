@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0 - 2026-07-21
+
+- Separate deterministic process, bounded Agent judgment and human decisions across every workflow stage.
+- Add a single control-boundary reference for both users and Agents.
+- Validate the fixed three-file application bundle and nine-section interview brief before state progression.
+- Record machine-readable Agent output contract manifests without treating validation as approval.
+- Fix the `submitted` to `interviewing` state transition.
+
 ## 0.3.0 - 2026-07-21
 
 - Extract a unique HR email address from the stored JD.

@@ -53,6 +53,20 @@ def parser() -> argparse.ArgumentParser:
     build.add_argument("--application", required=True)
     build.add_argument("--no-pdf", action="store_true")
 
+    email_prepare = sub.add_parser("email-prepare", help="Extract the HR email and create a reviewable delivery package")
+    email_prepare.add_argument("--application", required=True)
+    email_prepare.add_argument("--to")
+    email_prepare.add_argument("--from", dest="sender")
+    email_prepare.add_argument("--attachment-name")
+
+    email_approve = sub.add_parser("email-approve", help="Lock the reviewed recipient, subject, body and attachment")
+    email_approve.add_argument("--application", required=True)
+    email_approve.add_argument("--confirmed-by", required=True)
+
+    email_send = sub.add_parser("email-send", help="Send the approved application email once via SMTP")
+    email_send.add_argument("--application", required=True)
+    email_send.add_argument("--confirm", required=True, help="Confirmation code from delivery/final-review.txt")
+
     interview = sub.add_parser("interview", help="Research the company and prepare predicted questions")
     interview.add_argument("--application", required=True)
     interview.add_argument("--provider", choices=["rules", "openai"], default="rules")
@@ -97,6 +111,15 @@ def main(argv=None) -> int:
             print(approve_application(workspace, args.application, args.confirmed_by))
         elif args.command == "build":
             print(build_application(workspace, args.application, args.no_pdf))
+        elif args.command == "email-prepare":
+            from .email_delivery import prepare_email
+            print(prepare_email(workspace, args.application, args.to, args.sender, args.attachment_name))
+        elif args.command == "email-approve":
+            from .email_delivery import approve_email
+            print(approve_email(workspace, args.application, args.confirmed_by))
+        elif args.command == "email-send":
+            from .email_delivery import send_email
+            print(send_email(workspace, args.application, args.confirm))
         elif args.command == "interview":
             print(prepare_interview(workspace, args.application, args.provider))
         elif args.command == "review":

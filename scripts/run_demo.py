@@ -19,6 +19,7 @@ from careerflow.core import (  # noqa: E402
     record_review,
 )
 from careerflow.document_engine import create_plan  # noqa: E402
+from careerflow.email_delivery import approve_email, prepare_email  # noqa: E402
 
 
 def main() -> int:
@@ -49,11 +50,14 @@ def main() -> int:
         plan_path.write_text(json.dumps(plan), encoding="utf-8")
         approve_application(ws, app_id, "demo-user")
         build_application(ws, app_id, no_pdf=True)
+        prepare_email(ws, app_id, sender="alex@example.invalid")
+        approve_email(ws, app_id, "demo-user")
         prepare_interview(ws, app_id, "rules")
         record_review(ws, app_id, "rejected", demo / "review-notes.md")
         assert ws.meta(app)["stage"] == "closed"
         assert (target / "aggregate" / "review-summary.md").exists()
         assert (app / "output" / "tailored-resume.pdf").exists()
+        assert (app / "delivery" / "email-preview.eml").exists()
         print("PASS: complete offline workflow")
         print("Temporary workspace: %s" % target)
         return 0

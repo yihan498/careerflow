@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "careerflow-kit"
-version = "0.2.0"
+version = "0.3.0"
 description = "A privacy-first, agent-readable workflow for job applications from resume tailoring to interview review."
 readme = "README.md"
 requires-python = ">=3.8"

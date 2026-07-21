@@ -16,6 +16,18 @@
 - Label inference and unknowns; missing material is not negative evidence.
 - Cover business, workflow, role interpretation, resume questions and role questions.
 
+## Email delivery
+
+- Extract recipients from the complete JD. A manual selection is allowed only when choosing among addresses that actually appear in that JD.
+- Apply explicit JD filename rules when present; otherwise use the documented default.
+- Keep the subject identical to the approved attachment filename without its extension.
+- Show recipient, sender, subject, body and attachment before approval.
+- Recheck body, plan and attachment hashes immediately before SMTP submission.
+- Require the package-specific confirmation code generated after approval.
+- Allow encrypted SMTP through STARTTLS or SSL only.
+- Write a receipt only after the SMTP server accepts the message. Any send attempt, including an uncertain result, blocks automatic retry until the sender mailbox is checked manually.
+- Never store SMTP passwords in files, logs, plans or receipts.
+
 ## Review
 
 - Preserve the user's observation before adding interpretation.

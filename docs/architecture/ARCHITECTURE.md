@@ -20,13 +20,14 @@ careerflow/                           ~/.careerflow/ (default)
 4. **Approval layer** hashes all reviewed drafts. Build fails if content changes afterward.
 5. **Document adapter layer** inspects each uploaded PDF/DOCX and stores private region, typography, capacity and source-hash metadata.
 6. **Output layer** creates Markdown/HTML and invokes the packaged editor to write approved content into the registered original format.
-7. **Interview layer** starts only after the application package is built. Online mode researches current company information; offline mode produces a source ledger and question framework without pretending it performed research.
-8. **Review layer** stores job-specific feedback and synchronizes categorized learning to a cross-application summary.
+7. **Email delivery layer** extracts a unique JD recipient, renames the final attachment, creates a preview, locks an independent approval hash, sends once through the user's SMTP account and stores a receipt.
+8. **Interview layer** starts only after the application package is built. Online mode researches current company information; offline mode produces a source ledger and question framework without pretending it performed research.
+9. **Review layer** stores job-specific feedback and synchronizes categorized learning to a cross-application summary.
 
 ## State machine
 
 ```text
-created -> drafted -> approved -> built -> interviewing -> closed
+created -> drafted -> approved -> built -> submitted -> interviewing -> closed
              ^          |
              |          +-- content hash must match
              +-- revise before approval

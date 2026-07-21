@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0 - 2026-07-21
+
+- Extract a unique HR email address from the stored JD.
+- Prepare a reviewable email body, renamed final resume and `.eml` preview.
+- Set the subject to the approved attachment filename without its extension.
+- Add a dedicated approval hash for recipient, subject, body and attachment.
+- Send once through the user's single SMTP account and store a delivery receipt.
+- Block ambiguous recipients, changed attachments and duplicate sends.
+- Require JD-bound recipient selection, a package-specific confirmation code and encrypted SMTP.
+- Persist send intent before contacting SMTP so uncertain outcomes can never be retried automatically.
+
 ## 0.2.0 - 2026-07-21
 
 - Package a generalized version of the controlled resume editor.

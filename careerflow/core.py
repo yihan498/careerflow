@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
 
-STAGES = ["created", "drafted", "approved", "built", "interviewing", "closed"]
+STAGES = ["created", "drafted", "approved", "built", "submitted", "interviewing", "closed"]
 REQUIRED_PROFILE = ["id", "display_name", "headline", "education", "experiences", "skills"]
 REVIEW_CATEGORIES = {
     "knowledge": "公司、行业与岗位知识",
@@ -415,7 +415,7 @@ def build_application(workspace: Workspace, app_id: str, no_pdf: bool = False) -
 def prepare_interview(workspace: Workspace, app_id: str, provider: str) -> Path:
     app_dir = workspace.find_application(app_id)
     meta = workspace.meta(app_dir)
-    if meta["stage"] not in {"built", "interviewing"}:
+    if meta["stage"] not in {"built", "submitted", "interviewing"}:
         raise CareerFlowError("Interview preparation starts after the approved application package is built.")
     profile = workspace.profile(meta["user_id"])
     jd = read_text(app_dir / "input" / "jd.md")
@@ -473,7 +473,7 @@ Use: context -> task -> action -> evidence -> result -> reflection. Do not memor
 def record_review(workspace: Workspace, app_id: str, outcome: str, notes_file: Path) -> Path:
     app_dir = workspace.find_application(app_id)
     meta = workspace.meta(app_dir)
-    if meta["stage"] not in {"built", "interviewing", "closed"}:
+    if meta["stage"] not in {"built", "submitted", "interviewing", "closed"}:
         raise CareerFlowError("Review is only available after the application package was built.")
     notes = read_text(notes_file).strip()
     if not notes:
@@ -517,5 +517,5 @@ def record_review(workspace: Workspace, app_id: str, outcome: str, notes_file: P
         lines.append("")
     (workspace.root / "aggregate" / "review-summary.md").write_text("\n".join(lines), encoding="utf-8")
     if meta["stage"] != "closed":
-        workspace.transition(app_dir, "closed", {"built", "interviewing"})
+        workspace.transition(app_dir, "closed", {"built", "submitted", "interviewing"})
     return path

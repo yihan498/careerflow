@@ -8,6 +8,7 @@
   -> 按 JD 修改简历 + Cover Letter
   -> 用户确认
   -> 生成投递文件
+  -> 审核并发送求职邮件
   -> 收到面试后调研公司并预判问题
   -> 面试结果与经验复盘
   -> 汇总成下一次可复用的改进清单
@@ -23,6 +24,7 @@ CareerFlow 的重点不是一次生成一份简历，而是把每个岗位作为
 - Cover Letter；
 - “每一项表述来自哪段真实经历”的证据映射；
 - 经用户确认后生成的 Markdown、HTML，以及保留原格式的 PDF 或 DOCX；
+- 从 JD 提取的 HR 邮箱、正确命名的简历附件、邮件预览和发送回执；
 - 收到面试后的公司、业务、岗位和流程调研；
 - 结合最终简历生成的面试追问和回答框架；
 - 该岗位的复盘记录；
@@ -113,7 +115,38 @@ careerflow build --application example-company-example-intern
 
 审批会锁定草稿哈希。审批后如果内容被改动，系统会拒绝构建，必须重新确认。生成 PDF 后仍需人工检查字体、换行、重叠、缺字和分页。
 
-## 阶段二：收到面试后继续准备
+## 阶段二：审核并发送求职邮件
+
+构建并检查最终简历后，系统从 JD 中提取邮箱，按“姓名-学校-岗位-Resume”生成附件名，并让邮件主题与附件名称保持一致（不含扩展名）：
+
+```powershell
+$env:CAREERFLOW_EMAIL_FROM = "your-email@example.invalid"
+careerflow email-prepare --application example-company-example-intern
+```
+
+如果 JD 明确要求其他文件命名方式，由 Agent 通过 `--attachment-name` 传入。系统会生成 `email-plan.json` 和 `email-preview.eml`，需要检查收件人、发件人、主题、正文和附件。
+
+确认无误后：
+
+```powershell
+careerflow email-approve `
+  --application example-company-example-intern `
+  --confirmed-by "user-confirmed"
+
+$env:CAREERFLOW_SMTP_HOST = "your-smtp-host"
+$env:CAREERFLOW_SMTP_PORT = "587"
+$env:CAREERFLOW_SMTP_SECURITY = "starttls"
+$env:CAREERFLOW_SMTP_USER = "your-email@example.invalid"
+$env:CAREERFLOW_SMTP_PASSWORD = "your-app-password"
+Get-Content "$env:CAREERFLOW_HOME\applications\example-company-example-intern\delivery\final-review.txt"
+careerflow email-send `
+  --application example-company-example-intern `
+  --confirm <confirmation-code-from-final-review>
+```
+
+密码只放在本机环境变量中，不写入项目或申请目录。确认码只对应当前已锁定的收件人、主题、正文和附件。发送成功后会记录回执并进入 `submitted` 状态；一旦出现发送尝试（包括结果不确定），系统都会禁止自动重试，必须先人工检查发件箱。
+
+## 阶段三：收到面试后继续准备
 
 没有面试时，岗位可以停留在投递阶段。用户只需告诉 Agent“这个岗位可以准备面试了”，Agent 就能沿用该岗位已经保存的 JD、最终简历和证据库继续：
 
@@ -125,7 +158,7 @@ careerflow interview `
 
 联网模式会调研最新公司资料并记录来源；离线模式只生成待核实的调研框架，不会把未搜索的内容伪装成公司事实。
 
-## 阶段三：复盘并积累经验
+## 阶段四：复盘并积累经验
 
 面试未成功、主动退出、尚未出结果或成功拿到 Offer，都可以复盘：
 

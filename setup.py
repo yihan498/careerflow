@@ -12,9 +12,9 @@ setup(
     include_package_data=True,
     python_requires=">=3.8",
     extras_require={
-        "pdf": ["reportlab>=4.0"],
-        "documents": ["reportlab>=4.0", "PyMuPDF>=1.24,<2", "Pillow>=9.0"],
-        "dev": ["pytest>=7.0", "reportlab>=4.0", "PyMuPDF>=1.24,<2", "Pillow>=9.0"],
+        "pdf": ["reportlab>=4.0,<4.4"],
+        "documents": ["reportlab>=4.0,<4.4", "PyMuPDF>=1.24,<2", "Pillow>=9.0"],
+        "dev": ["pytest>=7.0", "reportlab>=4.0,<4.4", "PyMuPDF>=1.24,<2", "Pillow>=9.0"],
     },
     entry_points={"console_scripts": ["careerflow=careerflow.cli:main"]},
 )

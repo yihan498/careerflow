@@ -18,9 +18,9 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-pdf = ["reportlab>=4.0"]
-documents = ["reportlab>=4.0", "PyMuPDF>=1.24,<2", "Pillow>=9.0"]
-dev = ["pytest>=7.0", "reportlab>=4.0", "PyMuPDF>=1.24,<2", "Pillow>=9.0"]
+pdf = ["reportlab>=4.0,<4.4"]
+documents = ["reportlab>=4.0,<4.4", "PyMuPDF>=1.24,<2", "Pillow>=9.0"]
+dev = ["pytest>=7.0", "reportlab>=4.0,<4.4", "PyMuPDF>=1.24,<2", "Pillow>=9.0"]
 
 [project.scripts]
 careerflow = "careerflow.cli:main"

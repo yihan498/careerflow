@@ -7,9 +7,10 @@ name = "careerflow-vercel-document-worker"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
-  "careerflow-kit[documents] @ git+https://github.com/yihan498/careerflow.git@codex/web-platform",
+  "careerflow-kit[documents] @ git+https://github.com/yihan498/careerflow.git@827f44692b625269e57a9a8292aaae29d9261efc",
   "fastapi>=0.115,<1",
   "httpx>=0.27,<1",
+  "PyJWT>=2.9,<3",
 ]
 
 [project.scripts]

@@ -47,10 +47,26 @@ class ObjectStore:
         return await asyncio.to_thread(response["Body"].read)
 
     async def delete_prefix(self, prefix: str) -> None:
-        response = await asyncio.to_thread(self.client.list_objects_v2, Bucket=self.bucket, Prefix=prefix)
-        keys = [{"Key": item["Key"]} for item in response.get("Contents", [])]
-        if keys:
-            await asyncio.to_thread(self.client.delete_objects, Bucket=self.bucket, Delete={"Objects": keys})
+        continuation: str | None = None
+        while True:
+            arguments = {"Bucket": self.bucket, "Prefix": prefix, "MaxKeys": 1000}
+            if continuation:
+                arguments["ContinuationToken"] = continuation
+            response = await asyncio.to_thread(self.client.list_objects_v2, **arguments)
+            keys = [{"Key": item["Key"]} for item in response.get("Contents", [])]
+            if keys:
+                deleted = await asyncio.to_thread(
+                    self.client.delete_objects,
+                    Bucket=self.bucket,
+                    Delete={"Objects": keys, "Quiet": True},
+                )
+                if deleted.get("Errors"):
+                    raise RuntimeError("object storage reported incomplete prefix deletion")
+            if not response.get("IsTruncated"):
+                break
+            continuation = response.get("NextContinuationToken")
+            if not continuation:
+                raise RuntimeError("object storage pagination token was missing")
 
     async def delete(self, key: str) -> None:
         await asyncio.to_thread(self.client.delete_object, Bucket=self.bucket, Key=key)

@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./runtime/careerflow-web.sqlite3"
     supabase_url: str = ""
     supabase_jwt_audience: str = "authenticated"
+    supabase_jwt_issuer: str = ""
     supabase_jwks_url: str = ""
     supabase_service_role_key: str = ""
     r2_endpoint_url: str = ""
@@ -25,6 +26,7 @@ class Settings(BaseSettings):
     credential_key_version: int = 1
     document_token_secret: str = "development-only-document-token-secret"
     document_worker_shared_secret: str = "development-only-worker-secret"
+    document_worker_request_secret: str = "development-only-worker-request-secret"
     document_worker_url: str = "http://localhost:8081"
     document_callback_base_url: str = ""
     turnstile_secret_key: str = ""
@@ -47,13 +49,20 @@ class Settings(BaseSettings):
         if not self.is_production:
             return
         forbidden = ("development-only", "replace-with")
-        secrets = (self.credential_master_key, self.document_token_secret, self.document_worker_shared_secret)
+        secrets = (
+            self.credential_master_key,
+            self.document_token_secret,
+            self.document_worker_shared_secret,
+            self.document_worker_request_secret,
+        )
         if any(any(marker in value for marker in forbidden) for value in secrets):
             raise RuntimeError("production secrets are not configured")
         if self.dev_auth_bypass:
             raise RuntimeError("DEV_AUTH_BYPASS cannot be enabled in production")
         if not self.supabase_jwks_url:
             raise RuntimeError("SUPABASE_JWKS_URL is required in production")
+        if not self.supabase_url:
+            raise RuntimeError("SUPABASE_URL is required in production")
         if not self.supabase_service_role_key:
             raise RuntimeError("SUPABASE_SERVICE_ROLE_KEY is required in production")
 

@@ -55,13 +55,21 @@ class DocumentTokenSigner:
             raise RuntimeError("DOCUMENT_TOKEN_SECRET must contain at least 32 characters")
         self.secret = secret
 
-    def issue(self, job_id: str, action: str, source_sha256: str, ttl_seconds: int = 300) -> tuple[str, str]:
+    def issue(
+        self,
+        job_id: str,
+        action: str,
+        source_sha256: str,
+        source_url_sha256: str,
+        ttl_seconds: int = 300,
+    ) -> tuple[str, str]:
         jti = secrets.token_urlsafe(24)
         payload = {
             "jti": jti,
             "job_id": job_id,
             "action": action,
             "source_sha256": source_sha256,
+            "source_url_sha256": source_url_sha256,
             "exp": int(time.time()) + ttl_seconds,
             "iat": int(time.time()),
             "aud": "careerflow-document-worker",
@@ -71,4 +79,3 @@ class DocumentTokenSigner:
     def verify(self, token: str) -> DocumentTokenClaims:
         payload = jwt.decode(token, self.secret, algorithms=["HS256"], audience="careerflow-document-worker")
         return DocumentTokenClaims.model_validate(payload)
-

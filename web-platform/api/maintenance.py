@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import delete, select
 
 from .db import SessionFactory
-from .models import ArtifactRow, DocumentJobRow, ProviderCredentialRow
+from .models import ArtifactRow, DocumentJobRow, ProviderCredentialRow, TaskLeaseRow
 from .settings import Settings
 from .storage import ObjectStore
 
@@ -20,12 +20,16 @@ async def maintenance_once(store: ObjectStore | None) -> None:
                 ProviderCredentialRow.expires_at < now,
             )
         )
-        await session.execute(
-            delete(DocumentJobRow).where(
-                DocumentJobRow.expires_at < now - timedelta(days=1),
-                DocumentJobRow.status.in_(["queued", "failed"]),
-            )
-        )
+        stale_jobs = list((await session.execute(select(DocumentJobRow).where(
+            DocumentJobRow.expires_at < now - timedelta(days=1),
+            DocumentJobRow.status.in_(["queued", "failed"]),
+        ).limit(200))).scalars())
+        if store:
+            for job in stale_jobs:
+                await store.delete_prefix(f"{job.output_prefix}/")
+        for job in stale_jobs:
+            await session.delete(job)
+        await session.execute(delete(TaskLeaseRow).where(TaskLeaseRow.expires_at < now))
         stale = list((await session.execute(
             select(ArtifactRow).where(
                 ArtifactRow.active.is_(False),
@@ -48,4 +52,3 @@ async def maintenance_loop(settings: Settings, store: ObjectStore | None) -> Non
             # Operational monitoring captures the exception in production; cleanup must never stop the API.
             pass
         await asyncio.sleep(settings.maintenance_interval_seconds)
-

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, NavLink, Navigate, Route, Routes } from 'react-router-dom'
+import { Link, NavLink, Redirect, usePath } from './router'
 import { Session } from '@supabase/supabase-js'
 import { supabase } from './lib'
 import Auth from './Auth'
@@ -8,18 +8,19 @@ import Landing from './Landing'
 import Profile from './Profile'
 import Settings from './Settings'
 import Workspace from './Workspace'
+import Account from './Account'
+import Privacy from './Privacy'
 import { Spinner } from './components'
 
 function Shell() {
-  return <div className="app-shell"><aside><Link to="/" className="brand">CareerFlow</Link><nav><NavLink to="/">岗位进度</NavLink><NavLink to="/profile">个人资料</NavLink><NavLink to="/settings">模型设置</NavLink></nav><div className="aside-foot"><button onClick={() => supabase.auth.signOut()}>退出登录</button><small>你的决定始终优先于Agent。</small></div></aside><main className="content"><Routes><Route path="/" element={<Dashboard />} /><Route path="/profile" element={<Profile />} /><Route path="/settings" element={<Settings />} /><Route path="/applications/:id" element={<Workspace />} /><Route path="*" element={<Navigate to="/" />} /></Routes></main></div>
+  const path = usePath()
+  const page = path === '/' ? <Dashboard /> : path === '/profile' ? <Profile /> : path === '/settings' ? <Settings /> : path === '/account' ? <Account /> : /^\/applications\/[0-9a-f-]{36}$/.test(path) ? <Workspace /> : <Redirect to="/" />
+  return <div className="app-shell"><aside><Link to="/" className="brand">CareerFlow</Link><nav><NavLink to="/">岗位进度</NavLink><NavLink to="/profile">个人资料</NavLink><NavLink to="/settings">模型设置</NavLink><NavLink to="/account">复盘与隐私</NavLink></nav><div className="aside-foot"><button onClick={() => supabase.auth.signOut()}>退出登录</button><small>你的决定始终优先于Agent。</small></div></aside><main className="content">{page}</main></div>
 }
 
 function PublicShell() {
-  return <Routes>
-    <Route path="/" element={<Landing />} />
-    <Route path="/auth" element={<Auth />} />
-    <Route path="*" element={<Navigate to="/" />} />
-  </Routes>
+  const path = usePath()
+  return path === '/' ? <Landing /> : path === '/auth' ? <Auth /> : path === '/privacy' ? <Privacy /> : <Redirect to="/" />
 }
 
 export default function App() {

@@ -45,6 +45,7 @@ from .models import (
     utcnow,
 )
 from .providers import ProviderClient, SPECS, extract_json
+from .research import ResearchFetcher, ResearchSource
 from .schemas import ApplicationCreate, InterviewRequest, ProfileExtractRequest
 from .settings import Settings
 from .storage import ObjectStore
@@ -85,6 +86,7 @@ class WorkflowService:
         self.providers = ProviderClient(settings.model_timeout_seconds)
         self.credentials = CredentialService(settings)
         self.store = store
+        self.research = ResearchFetcher()
 
     async def get_profile(self, session: AsyncSession, user_id: str) -> CandidateProfileRow | None:
         return await session.get(CandidateProfileRow, user_id)
@@ -313,6 +315,8 @@ EVIDENCE:\n{json.dumps(confirmed.evidence if confirmed else [], ensure_ascii=Fal
                 region = regions.get(change.region_id)
                 if not region or change.old_text != region.get("text"):
                     raise PlatformError("document_plan_contract", f"Invalid source region: {change.region_id}")
+                if not change.evidence_ids:
+                    raise PlatformError("document_plan_contract", f"Every replacement requires evidence: {change.region_id}")
                 if any(evidence_id not in allowed_evidence for evidence_id in change.evidence_ids):
                     raise PlatformError("document_plan_contract", f"Unknown evidence ID in {change.region_id}")
             app.document_plan = plan.model_dump()
@@ -333,6 +337,14 @@ EVIDENCE:\n{json.dumps(confirmed.evidence if confirmed else [], ensure_ascii=Fal
         app = await self.application(session, user_id, app_id, lock=True)
         if Stage(app.stage) != Stage.DRAFTED or not app.draft_bundle:
             raise ConflictError("stage_blocked", "A complete draft is required before approval.")
+        has_template = bool(await session.scalar(select(func.count()).select_from(ResumeTemplateRow).where(
+            ResumeTemplateRow.user_id == user_id
+        )))
+        if has_template and not app.document_plan:
+            raise ConflictError(
+                "document_plan_required",
+                "Review and approve an original-format document plan before approving this application.",
+            )
         bundle_hash = canonical_hash({"draft": app.draft_bundle, "document_plan": app.document_plan})
         await session.execute(
             delete(ApprovalRow).where(ApprovalRow.application_id == app.id, ApprovalRow.user_id == user_id)
@@ -350,6 +362,11 @@ EVIDENCE:\n{json.dumps(confirmed.evidence if confirmed else [], ensure_ascii=Fal
         app = await self.application(session, user_id, app_id, lock=True)
         if Stage(app.stage) != Stage.APPROVED or not app.draft_bundle:
             raise ConflictError("stage_blocked", "Build requires a valid approval.")
+        has_template = bool(await session.scalar(select(func.count()).select_from(ResumeTemplateRow).where(
+            ResumeTemplateRow.user_id == user_id
+        )))
+        if has_template and not app.document_plan:
+            raise ConflictError("document_plan_required", "The uploaded source resume requires an approved document plan.")
         approval = (await session.execute(
             select(ApprovalRow).where(
                 ApprovalRow.application_id == app.id,
@@ -385,41 +402,57 @@ EVIDENCE:\n{json.dumps(confirmed.evidence if confirmed else [], ensure_ascii=Fal
         if int(global_usage or 0) + new_size > int(self.settings.global_storage_capacity_bytes * 0.8):
             raise PlatformError("global_storage_guard", "New artifacts are temporarily paused near the storage limit.", 503)
         staged: list[ArtifactRow] = []
-        for name, (data, content_type) in payloads.items():
-            stored = await self.store.put(f"{prefix}/{name}", data, content_type)
-            row = ArtifactRow(
-                user_id=user_id,
-                application_id=app.id,
-                kind=name,
-                version_id=version,
-                object_key=stored.key,
-                sha256=stored.sha256,
-                size_bytes=stored.size,
-                content_type=stored.content_type,
-                active=False,
-            )
-            session.add(row)
-            staged.append(row)
-        await session.flush()
-        await session.execute(
-            ArtifactRow.__table__.update()
-            .where(ArtifactRow.application_id == app.id, ArtifactRow.active.is_(True))
-            .values(active=False)
-        )
-        for artifact in staged:
-            artifact.active = True
-        if original_artifact_version:
+        uploaded_keys: list[str] = []
+        try:
+            for name, (data, content_type) in payloads.items():
+                stored = await self.store.put(f"{prefix}/{name}", data, content_type)
+                uploaded_keys.append(stored.key)
+                row = ArtifactRow(
+                    user_id=user_id,
+                    application_id=app.id,
+                    kind=name,
+                    version_id=version,
+                    object_key=stored.key,
+                    sha256=stored.sha256,
+                    size_bytes=stored.size,
+                    content_type=stored.content_type,
+                    active=False,
+                )
+                session.add(row)
+                staged.append(row)
+            await session.flush()
             await session.execute(
                 ArtifactRow.__table__.update()
                 .where(
                     ArtifactRow.application_id == app.id,
-                    ArtifactRow.version_id == original_artifact_version,
+                    ArtifactRow.user_id == user_id,
+                    ArtifactRow.active.is_(True),
                 )
-                .values(active=True)
+                .values(active=False)
             )
-        app.active_output_version = version
-        self._transition(app, Stage.BUILT)
-        await session.commit()
+            for artifact in staged:
+                artifact.active = True
+            if original_artifact_version:
+                await session.execute(
+                    ArtifactRow.__table__.update()
+                    .where(
+                        ArtifactRow.application_id == app.id,
+                        ArtifactRow.user_id == user_id,
+                        ArtifactRow.version_id == original_artifact_version,
+                    )
+                    .values(active=True)
+                )
+            app.active_output_version = version
+            self._transition(app, Stage.BUILT)
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            for key in uploaded_keys:
+                try:
+                    await self.store.delete(key)
+                except Exception:
+                    pass
+            raise
         return {"application": _application_payload(app), "version": version, "artifacts": [a.kind for a in staged]}
 
     async def delivery(self, session: AsyncSession, user_id: str, app_id: str, recipient: str | None) -> dict[str, Any]:
@@ -458,7 +491,8 @@ EVIDENCE:\n{json.dumps(confirmed.evidence if confirmed else [], ensure_ascii=Fal
         message = EmailMessage()
         message["To"] = selected
         message["Subject"] = base
-        message.set_content(re.sub(r"^# Cover Letter\s*", "", bundle.cover_letter_markdown).strip())
+        body = re.sub(r"^# Cover Letter\s*", "", bundle.cover_letter_markdown).strip()
+        message.set_content(body)
         attachment_data = await self.store.get(attachment.object_key)
         if extension == ".pdf":
             message.add_attachment(attachment_data, maintype="application", subtype="pdf", filename=attachment_name)
@@ -469,13 +503,60 @@ EVIDENCE:\n{json.dumps(confirmed.evidence if confirmed else [], ensure_ascii=Fal
                 subtype="vnd.openxmlformats-officedocument.wordprocessingml.document",
                 filename=attachment_name,
             )
+        eml_data = message.as_bytes()
+        if len(eml_data) > self.settings.max_user_storage_bytes:
+            raise PlatformError("eml_too_large", "The prepared email exceeds the account storage limit.", 413)
+        version = canonical_hash({
+            "application": app.id,
+            "output_version": app.active_output_version,
+            "recipient": selected,
+            "attachment_sha256": attachment.sha256,
+            "body": body,
+        })[:32]
+        object_key = f"users/{user_id}/applications/{app.id}/delivery/{version}/application.eml"
+        existing_eml = (await session.execute(
+            select(ArtifactRow).where(ArtifactRow.object_key == object_key, ArtifactRow.user_id == user_id)
+        )).scalar_one_or_none()
+        if existing_eml is None:
+            user_usage = await session.scalar(
+                select(func.coalesce(func.sum(ArtifactRow.size_bytes), 0)).where(ArtifactRow.user_id == user_id)
+            )
+            global_usage = await session.scalar(select(func.coalesce(func.sum(ArtifactRow.size_bytes), 0)))
+            if int(user_usage or 0) + len(eml_data) > self.settings.max_user_storage_bytes:
+                raise PlatformError("storage_quota", "Preparing this email would exceed the account storage quota.", 413)
+            if int(global_usage or 0) + len(eml_data) > int(self.settings.global_storage_capacity_bytes * 0.8):
+                raise PlatformError("global_storage_guard", "New email artifacts are temporarily paused near the storage limit.", 503)
+            stored = await self.store.put(object_key, eml_data, "message/rfc822")
+            existing_eml = ArtifactRow(
+                user_id=user_id,
+                application_id=app.id,
+                kind="application.eml",
+                version_id=version,
+                object_key=stored.key,
+                sha256=stored.sha256,
+                size_bytes=stored.size,
+                content_type=stored.content_type,
+                active=True,
+            )
+            session.add(existing_eml)
+            await session.flush()
+        await session.execute(
+            ArtifactRow.__table__.update().where(
+                ArtifactRow.application_id == app.id,
+                ArtifactRow.user_id == user_id,
+                ArtifactRow.kind == "application.eml",
+                ArtifactRow.id != existing_eml.id,
+            ).values(active=False)
+        )
+        existing_eml.active = True
+        await session.commit()
         return {
             "requires_selection": False,
             "recipient": selected,
             "subject": base,
             "attachment_name": attachment_name,
-            "body": message.get_content(),
-            "eml": message.as_string(),
+            "body": body,
+            "eml_artifact_id": existing_eml.id,
         }
 
     async def mark_submitted(self, session: AsyncSession, user_id: str, app_id: str) -> dict[str, Any]:
@@ -507,22 +588,54 @@ EVIDENCE:\n{json.dumps(confirmed.evidence if confirmed else [], ensure_ascii=Fal
             idempotency_key=request.idempotency_key,
         )
         session.add(run)
-        prompt = self._interview_prompt(app, profile.profile if profile else {}, [str(url) for url in request.source_urls])
+        uploaded_keys: list[str] = []
         try:
+            source_urls = [str(url) for url in request.source_urls]
+            sources: list[ResearchSource] = []
+            if not request.use_native_search:
+                sources = await self.research.fetch_all(source_urls)
+            prompt = self._interview_prompt(
+                app,
+                profile.profile if profile else {},
+                sources,
+                native_search=request.use_native_search,
+            )
             result = await self.providers.generate(
                 request.provider, key, credential.base_url, credential.model, prompt,
                 web_search=request.use_native_search, structured=False, max_output_tokens=12_000,
             )
             try:
-                validate_interview_brief(result.text, require_sources=True)
+                validate_interview_brief(
+                    result.text,
+                    require_sources=True,
+                    allowed_evidence_ids={source.evidence_id for source in sources},
+                )
             except ValueError as exc:
                 raise PlatformError("provider_contract_error", f"Interview brief failed validation: {exc}") from exc
             version = str(uuid.uuid4())
             if self.store:
+                source_manifest = json.dumps(
+                    [source.prompt_payload() for source in sources],
+                    ensure_ascii=False,
+                    indent=2,
+                ).encode()
+                if sources:
+                    source_artifact = await self.store.put(
+                        f"users/{user_id}/applications/{app.id}/interview/{version}/research-sources.json",
+                        source_manifest,
+                        "application/json",
+                    )
+                    uploaded_keys.append(source_artifact.key)
+                    session.add(ArtifactRow(
+                        user_id=user_id, application_id=app.id, kind="research-sources.json", version_id=version,
+                        object_key=source_artifact.key, sha256=source_artifact.sha256,
+                        size_bytes=source_artifact.size, content_type=source_artifact.content_type, active=True,
+                    ))
                 stored = await self.store.put(
                     f"users/{user_id}/applications/{app.id}/interview/{version}/interview-brief.md",
                     result.text.encode(), "text/markdown"
                 )
+                uploaded_keys.append(stored.key)
                 session.add(ArtifactRow(
                     user_id=user_id, application_id=app.id, kind="interview-brief.md", version_id=version,
                     object_key=stored.key, sha256=stored.sha256, size_bytes=stored.size,
@@ -536,10 +649,25 @@ EVIDENCE:\n{json.dumps(confirmed.evidence if confirmed else [], ensure_ascii=Fal
             await session.commit()
             return {"application": _application_payload(app), "brief": result.text}
         except PlatformError as exc:
+            for object_key in uploaded_keys:
+                try:
+                    if self.store:
+                        await self.store.delete(object_key)
+                except Exception:
+                    pass
             run.status = RunStatus.NEEDS_ATTENTION.value if exc.code == "provider_result_uncertain" else RunStatus.FAILED.value
             run.error_code = exc.code
             run.completed_at = utcnow()
             await session.commit()
+            raise
+        except Exception:
+            await session.rollback()
+            for object_key in uploaded_keys:
+                try:
+                    if self.store:
+                        await self.store.delete(object_key)
+                except Exception:
+                    pass
             raise
 
     async def review(
@@ -612,8 +740,22 @@ EVIDENCE:\n{json.dumps(evidence, ensure_ascii=False)}
 COMPANY: {app.company}\nROLE: {app.role}\nFULL JD:\n{app.jd}"""
 
     @staticmethod
-    def _interview_prompt(app: ApplicationRow, profile: dict[str, Any], urls: list[str]) -> str:
+    def _interview_prompt(
+        app: ApplicationRow,
+        profile: dict[str, Any],
+        sources: list[ResearchSource],
+        *,
+        native_search: bool,
+    ) -> str:
         resume = (app.draft_bundle or {}).get("resume_markdown", "")
+        evidence = [source.prompt_payload() for source in sources]
+        evidence_rule = (
+            "Native search citations are not yet independently captured. Do not use any Verified label; "
+            "label search-derived statements [Inference] and unresolved statements [Unknown]."
+            if native_search
+            else "A factual claim may be labelled [Verified:SRC-XX] only when the cited source text below directly supports it. "
+            "All other claims must be [Inference] or [Unknown]."
+        )
         return f"""Prepare a source-grounded interview brief. Use these exact headings once and in order:
 ## 1. Evidence Boundary and Research Date
 ## 2. Company Overview
@@ -624,8 +766,9 @@ COMPANY: {app.company}\nROLE: {app.role}\nFULL JD:\n{app.jd}"""
 ## 7. Resume Follow-ups
 ## 8. Mock Interview and Final Checklist
 ## 9. Source Ledger
-Label current claims [Verified], reasoning [Inference], and unresolved items [Unknown]. Include source URLs in section 9. Never claim a hiring process is known without a source.
-COMPANY: {app.company}\nROLE: {app.role}\nJD:\n{app.jd}\nAPPROVED RESUME:\n{resume}\nPROFILE:\n{json.dumps(profile, ensure_ascii=False)}\nUSER SOURCES:\n{json.dumps(urls)}"""
+{evidence_rule}
+Include each supplied evidence ID, URL, SHA-256 and research date in section 9. Never claim a hiring process is known without direct evidence.
+COMPANY: {app.company}\nROLE: {app.role}\nJD:\n{app.jd}\nAPPROVED RESUME:\n{resume}\nPROFILE:\n{json.dumps(profile, ensure_ascii=False)}\nRETRIEVED SOURCE EVIDENCE:\n{json.dumps(evidence, ensure_ascii=False)}"""
 
     @staticmethod
     def _review_category(feedback: ReviewInput) -> str:

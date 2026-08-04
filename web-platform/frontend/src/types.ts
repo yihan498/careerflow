@@ -25,6 +25,7 @@ export interface Application {
   draft_bundle?: DraftBundle
   document_plan?: any
   active_output_version?: string
+  requires_document_plan?: boolean
 }
 
 export interface CandidateProfile {

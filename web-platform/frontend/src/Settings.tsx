@@ -28,7 +28,8 @@ export default function Settings() {
     <form onSubmit={submit} className="stack">
       <Field label="服务商"><select value={provider} onChange={e => setProvider(e.target.value)}>{providers.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}</select></Field>
       <Field label="API Key"><input type="password" required minLength={8} value={key} onChange={e => setKey(e.target.value)} autoComplete="off" /></Field>
-      <Field label="Base URL"><input required value={baseUrl} onChange={e => setBaseUrl(e.target.value)} /></Field>
+      <Field label="官方API地址"><input readOnly value={baseUrl} aria-describedby="provider-endpoint-help" /></Field>
+      <p id="provider-endpoint-help" className="muted">为防止密钥误发和服务器请求内网，当前只允许经过验证的官方地址。</p>
       <Field label={selected?.requires_endpoint_id ? 'Endpoint ID' : '模型ID'}><input required value={model} onChange={e => setModel(e.target.value)} /></Field>
       <label className="check"><input type="checkbox" checked={save} onChange={e => setSave(e.target.checked)} />加密保存，不必每次填写</label>
       {error && <Notice tone="error">{error}</Notice>}{message && <Notice tone="success">{message}</Notice>}
@@ -36,4 +37,3 @@ export default function Settings() {
     </form>
   </section>
 }
-

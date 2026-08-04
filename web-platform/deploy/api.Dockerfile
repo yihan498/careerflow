@@ -1,7 +1,7 @@
 FROM node:22-alpine AS frontend
 WORKDIR /build
 COPY web-platform/frontend/package*.json ./
-RUN npm install
+RUN npm ci
 COPY web-platform/frontend/ ./
 ARG VITE_SUPABASE_URL
 ARG VITE_SUPABASE_ANON_KEY
@@ -23,4 +23,3 @@ RUN useradd --create-home --uid 10001 careerflow && chown -R careerflow:careerfl
 USER careerflow
 EXPOSE 8000
 CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
-

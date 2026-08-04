@@ -108,7 +108,8 @@ create table if not exists document_jobs (
   status text not null check (status in ('queued','running','succeeded','failed')),
   output_prefix text not null,
   result jsonb not null default '{}'::jsonb,
-  expires_at timestamptz not null
+  expires_at timestamptz not null,
+  created_at timestamptz not null default now()
 );
 
 create table if not exists reviews (
@@ -134,4 +135,3 @@ alter table document_jobs enable row level security;
 alter table reviews enable row level security;
 
 revoke all on all tables in schema public from anon, authenticated;
-

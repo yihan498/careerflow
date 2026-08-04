@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import asyncio
 from time import monotonic
 
 import httpx
@@ -22,16 +23,20 @@ class JwksCache:
     def __init__(self):
         self.payload: dict | None = None
         self.loaded_at = 0.0
+        self._lock = asyncio.Lock()
 
-    async def get(self, url: str) -> dict:
-        if self.payload and monotonic() - self.loaded_at < 3600:
+    async def get(self, url: str, force: bool = False) -> dict:
+        if not force and self.payload and monotonic() - self.loaded_at < 3600:
             return self.payload
-        async with httpx.AsyncClient(timeout=10) as client:
-            response = await client.get(url)
-            response.raise_for_status()
-        self.payload = response.json()
-        self.loaded_at = monotonic()
-        return self.payload
+        async with self._lock:
+            if not force and self.payload and monotonic() - self.loaded_at < 3600:
+                return self.payload
+            async with httpx.AsyncClient(timeout=10, follow_redirects=False) as client:
+                response = await client.get(url)
+                response.raise_for_status()
+            self.payload = response.json()
+            self.loaded_at = monotonic()
+            return self.payload
 
 
 jwks_cache = JwksCache()
@@ -49,11 +54,22 @@ async def current_user(
     token = authorization.removeprefix("Bearer ").strip()
     try:
         header = jwt.get_unverified_header(token)
+        if header.get("alg") not in {"RS256", "ES256"}:
+            raise jwt.InvalidAlgorithmError("unsupported JWT algorithm")
         jwks = await jwks_cache.get(settings.supabase_jwks_url)
-        matching = next(item for item in jwks.get("keys", []) if item.get("kid") == header.get("kid"))
+        matching = next((item for item in jwks.get("keys", []) if item.get("kid") == header.get("kid")), None)
+        if matching is None:
+            jwks = await jwks_cache.get(settings.supabase_jwks_url, force=True)
+            matching = next(item for item in jwks.get("keys", []) if item.get("kid") == header.get("kid"))
         key = jwt.PyJWK.from_dict(matching).key
-        claims = jwt.decode(token, key, algorithms=[header["alg"]], audience=settings.supabase_jwt_audience)
+        issuer = settings.supabase_jwt_issuer or f"{settings.supabase_url.rstrip('/')}/auth/v1"
+        claims = jwt.decode(
+            token,
+            key,
+            algorithms=["RS256", "ES256"],
+            audience=settings.supabase_jwt_audience,
+            issuer=issuer,
+        )
     except Exception as exc:
         raise PlatformError("invalid_session", "The session is invalid or expired.", 401) from exc
     return CurrentUser(str(claims["sub"]), str(claims.get("email", "")))
-

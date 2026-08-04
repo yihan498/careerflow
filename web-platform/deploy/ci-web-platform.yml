@@ -1,0 +1,36 @@
+name: CareerFlow web-platform checks
+
+on:
+  push:
+    paths: ["web-platform/**"]
+  pull_request:
+    paths: ["web-platform/**"]
+
+jobs:
+  web-platform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web-platform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web-platform/frontend/package-lock.json
+      - run: python -m pip install -e ".[dev,documents]"
+      - run: python -m pytest -q
+      - run: npm ci
+        working-directory: web-platform/frontend
+      - run: npm test -- --run
+        working-directory: web-platform/frontend
+      - run: npm run build
+        working-directory: web-platform/frontend
+      - run: npm audit --omit=dev --audit-level=high
+        working-directory: web-platform/frontend
+      - run: pwsh -File scripts/verify-isolation.ps1

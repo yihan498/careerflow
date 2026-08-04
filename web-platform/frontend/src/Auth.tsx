@@ -1,5 +1,5 @@
 import { FormEvent, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link } from './router'
 import { Turnstile } from '@marsidev/react-turnstile'
 import { supabase } from './lib'
 import { Button, Field, Notice } from './components'
@@ -15,6 +15,7 @@ export default function Auth() {
 
   async function submit(event: FormEvent) {
     event.preventDefault(); setError(''); setMessage('')
+    if (siteKey && !captcha) { setError('请先完成人机验证。'); return }
     const options = captcha ? { captchaToken: captcha } : undefined
     const result = mode === 'signin'
       ? await supabase.auth.signInWithPassword({ email, password, options })
@@ -37,7 +38,7 @@ export default function Auth() {
       <Field label="密码" hint="至少8位，建议使用独立密码"><input type="password" minLength={8} required value={password} onChange={e => setPassword(e.target.value)} /></Field>
       {siteKey && <Turnstile siteKey={siteKey} onSuccess={setCaptcha} />}
       {error && <Notice tone="error">{error}</Notice>}{message && <Notice tone="success">{message}</Notice>}
-      <Button type="submit">{mode === 'signin' ? '登录' : '注册并验证邮箱'}</Button>
+      <Button type="submit" disabled={Boolean(siteKey && !captcha)}>{mode === 'signin' ? '登录' : '注册并验证邮箱'}</Button>
       <button type="button" className="text-button" onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')}>
         {mode === 'signin' ? '还没有账户？注册' : '已有账户？登录'}
       </button>

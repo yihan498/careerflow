@@ -18,6 +18,14 @@ SessionFactory = async_sessionmaker(engine, expire_on_commit=False)
 
 async def init_db() -> None:
     if settings.is_production:
+        migration = Path(__file__).resolve().parents[1] / "migrations" / "002_deletion_jobs.sql"
+        async with engine.begin() as connection:
+            # This additive migration is idempotent and serialized across serverless cold starts.
+            await connection.exec_driver_sql("select pg_advisory_lock(hashtext('careerflow-web-migrations'))")
+            try:
+                await connection.exec_driver_sql(migration.read_text(encoding="utf-8"))
+            finally:
+                await connection.exec_driver_sql("select pg_advisory_unlock(hashtext('careerflow-web-migrations'))")
         return
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
@@ -26,4 +34,3 @@ async def init_db() -> None:
 async def get_session() -> AsyncIterator[AsyncSession]:
     async with SessionFactory() as session:
         yield session
-

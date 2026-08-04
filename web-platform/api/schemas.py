@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 
 from shared.contracts import CandidateProfile, DocumentPlan, DraftBundle, ProviderId, ReviewInput
 
@@ -65,3 +65,32 @@ class ProfileExtractRequest(BaseModel):
 
 class ApiEnvelope(BaseModel):
     data: Any
+
+
+class StrictRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class DocumentConsumeRequest(StrictRequest):
+    token: str = Field(min_length=40, max_length=4_000)
+
+
+class DocumentUploadUrlRequest(StrictRequest):
+    name: str = Field(pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,199}$")
+    content_type: str = Field(min_length=1, max_length=200)
+
+
+class DocumentOutputFile(StrictRequest):
+    name: str = Field(pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._-]{0,199}$")
+    size: int = Field(ge=0, le=20 * 1024 * 1024)
+    sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    content_type: str = Field(min_length=1, max_length=200)
+
+
+class DocumentCompleteRequest(StrictRequest):
+    files: list[DocumentOutputFile] = Field(min_length=1, max_length=12)
+    result: dict[str, Any] = Field(default_factory=dict)
+
+
+class DocumentFailRequest(StrictRequest):
+    error_code: str = Field(default="worker_failed", pattern=r"^[A-Za-z][A-Za-z0-9_.-]{0,99}$")

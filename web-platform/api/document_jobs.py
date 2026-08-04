@@ -31,6 +31,8 @@ CONTENT_TYPES = {
     ".png": "image/png",
     ".txt": "text/plain",
 }
+MAX_WORKER_OUTPUT_FILES = 12
+MAX_WORKER_OUTPUT_BYTES = 20 * 1024 * 1024
 
 
 class DocumentJobService:
@@ -68,12 +70,14 @@ class DocumentJobService:
         )
         session.add(source_artifact)
         await session.flush()
+        source_url = self.store.signed_get(source_key, 600)
         job, token = await self._new_job(
             session, user_id, None, "inspect", source_sha,
+            hashlib.sha256(source_url.encode()).hexdigest(),
             {"source_object_key": source_key, "source_artifact_id": source_artifact.id, "source_filename": f"source{suffix}"},
         )
         await session.commit()
-        response = await self._call_worker(job, token, source_key, f"source{suffix}")
+        response = await self._call_worker(job, token, source_url, f"source{suffix}")
         await session.refresh(job)
         if job.status != "succeeded":
             raise PlatformError("document_job_failed", "The isolated document inspection did not complete.", 502)
@@ -128,12 +132,21 @@ class DocumentJobService:
         package_sha = hashlib.sha256(package_data).hexdigest()
         package_key = f"users/{user_id}/applications/{application_id}/document-input/{secrets.token_hex(16)}.zip"
         await self.store.put(package_key, package_data, "application/zip")
+        source_url = self.store.signed_get(package_key, 600)
         job, token = await self._new_job(
             session, user_id, application_id, "build", package_sha,
+            hashlib.sha256(source_url.encode()).hexdigest(),
             {"source_object_key": package_key, "source_filename": "input.zip"},
         )
         await session.commit()
-        await self._call_worker(job, token, package_key, "input.zip")
+        try:
+            await self._call_worker(job, token, source_url, "input.zip")
+        finally:
+            # The build package is a transient transport object, never a user artifact.
+            try:
+                await self.store.delete(package_key)
+            except Exception:
+                pass
         await session.refresh(job)
         if job.status != "succeeded":
             raise PlatformError("document_job_failed", "The isolated document build did not complete.", 502)
@@ -168,6 +181,9 @@ class DocumentJobService:
     ) -> dict[str, str]:
         if not SAFE_OUTPUT_NAME.fullmatch(name):
             raise PlatformError("unsafe_output_name", "Worker output name is not allowed.")
+        expected_type = CONTENT_TYPES.get(Path(name).suffix.lower())
+        if not expected_type or content_type != expected_type:
+            raise PlatformError("unsafe_output_type", "Worker output content type is not allowed.")
         row = await session.get(DocumentJobRow, job_id)
         if not row or row.status != "running":
             raise ConflictError("document_job_inactive", "Document job is not running.")
@@ -182,8 +198,15 @@ class DocumentJobService:
         )).scalar_one_or_none()
         if not row or row.status != "running":
             raise ConflictError("document_job_inactive", "Document job is not running.")
+        if len(files) > MAX_WORKER_OUTPUT_FILES or sum(int(item.get("size", 0)) for item in files) > MAX_WORKER_OUTPUT_BYTES:
+            raise PlatformError("document_output_limit", "Worker output exceeded the job quota.", 413)
         for item in files:
             name = str(item["name"])
+            if not SAFE_OUTPUT_NAME.fullmatch(name):
+                raise PlatformError("unsafe_output_name", "Worker output name is not allowed.")
+            expected_type = CONTENT_TYPES.get(Path(name).suffix.lower())
+            if not expected_type or str(item["content_type"]) != expected_type:
+                raise PlatformError("unsafe_output_type", "Worker output content type is not allowed.")
             key = f"{row.output_prefix}/{name}"
             head = await self.store.head(key)
             if int(head["ContentLength"]) != int(item["size"]):
@@ -203,13 +226,17 @@ class DocumentJobService:
     async def fail(self, session: AsyncSession, job_id: str, code: str) -> None:
         row = await session.get(DocumentJobRow, job_id)
         if row:
+            try:
+                await self.store.delete_prefix(f"{row.output_prefix}/")
+            except Exception:
+                pass
             row.status = "failed"
             row.result = {**row.result, "error_code": code}
             await session.commit()
 
     async def _new_job(
         self, session: AsyncSession, user_id: str, application_id: str | None, action: str,
-        source_sha: str, initial_result: dict[str, Any]
+        source_sha: str, source_url_sha: str, initial_result: dict[str, Any]
     ) -> DocumentJobRow:
         job = DocumentJobRow(
             user_id=user_id,
@@ -225,25 +252,28 @@ class DocumentJobService:
         )
         session.add(job)
         await session.flush()
-        token, jti = self.signer.issue(job.id, action, source_sha, 600)
+        token, jti = self.signer.issue(job.id, action, source_sha, source_url_sha, 600)
         job.token_jti = jti
         job.output_prefix = f"users/{user_id}/" + (
             f"applications/{application_id}/document-output/{job.id}" if application_id else f"profile/template-output/{job.id}"
         )
         return job, token
 
-    async def _call_worker(self, job: DocumentJobRow, token: str, source_key: str, filename: str) -> dict[str, Any]:
+    async def _call_worker(self, job: DocumentJobRow, token: str, source_url: str, filename: str) -> dict[str, Any]:
         payload = {
             "token": token,
             "job_id": job.id,
             "action": job.action,
-            "source_url": self.store.signed_get(source_key, 600),
+            "source_url": source_url,
             "source_filename": filename,
-            "callback_base_url": (self.settings.document_callback_base_url or self.settings.app_origin).rstrip("/"),
         }
         try:
             async with httpx.AsyncClient(timeout=self.settings.document_timeout_seconds) as client:
-                response = await client.post(f"{self.settings.document_worker_url.rstrip('/')}/v1/jobs", json=payload)
+                response = await client.post(
+                    f"{self.settings.document_worker_url.rstrip('/')}/v1/jobs",
+                    headers={"X-Worker-Request-Secret": self.settings.document_worker_request_secret},
+                    json=payload,
+                )
             if response.status_code >= 400:
                 raise PlatformError("document_worker_error", f"Document worker returned HTTP {response.status_code}.", 502)
             return response.json()

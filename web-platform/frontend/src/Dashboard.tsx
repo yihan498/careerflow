@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link } from './router'
 import { api } from './lib'
 import { Application } from './types'
 import { Button, Field, Notice, StageBadge } from './components'

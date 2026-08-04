@@ -134,6 +134,31 @@ class DocumentJobRow(Base):
     output_prefix: Mapped[str] = mapped_column(String(1000))
     result: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class DeletionJobRow(Base):
+    __tablename__ = "deletion_jobs"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=uuid_str)
+    user_id: Mapped[str] = mapped_column(String(64), index=True)
+    scope: Mapped[str] = mapped_column(String(32))
+    resource_id: Mapped[str] = mapped_column(String(64), default="")
+    status: Mapped[str] = mapped_column(String(32), default="pending")
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    __table_args__ = (UniqueConstraint("user_id", "scope", "resource_id", name="uq_deletion_scope"),)
+
+
+class TaskLeaseRow(Base):
+    __tablename__ = "task_leases"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True, default=uuid_str)
+    user_id: Mapped[str] = mapped_column(String(64), index=True)
+    kind: Mapped[str] = mapped_column(String(32))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    __table_args__ = (UniqueConstraint("user_id", "kind", name="uq_task_lease"),)
 
 
 class ReviewRow(Base):

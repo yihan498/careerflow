@@ -4,6 +4,7 @@ import json
 import re
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -97,7 +98,7 @@ class ProviderClient:
         max_output_tokens: int = 8_000,
     ) -> ProviderResult:
         spec = SPECS[provider]
-        resolved_base = (base_url or spec.default_base_url).rstrip("/")
+        resolved_base = self.resolve_base_url(provider, base_url)
         resolved_model = model or spec.default_model
         if not resolved_model:
             raise PlatformError("provider_configuration", "This provider requires a model or endpoint ID.")
@@ -152,6 +153,28 @@ class ProviderClient:
         return ProviderResult(text, body.get("usage") or {}, str(body.get("model") or resolved_model))
 
     @staticmethod
+    def resolve_base_url(provider: ProviderId, requested: str) -> str:
+        """Use only audited provider endpoints; browser input is never an egress policy."""
+        expected = SPECS[provider].default_base_url.rstrip("/")
+        candidate = (requested or expected).rstrip("/")
+        parsed = urlsplit(candidate)
+        if (
+            candidate != expected
+            or parsed.scheme != "https"
+            or not parsed.hostname
+            or parsed.username
+            or parsed.password
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise PlatformError(
+                "provider_endpoint_not_allowed",
+                "This provider must use CareerFlow's audited official API endpoint.",
+                400,
+            )
+        return expected
+
+    @staticmethod
     def _response_text(protocol: str, body: dict[str, Any]) -> str:
         if protocol == "responses":
             texts: list[str] = []
@@ -171,4 +194,3 @@ class ProviderClient:
         return await self.generate(
             provider, api_key, base_url, model, "Reply with exactly OK.", max_output_tokens=4
         )
-

@@ -23,6 +23,8 @@ services:
         generateValue: true
       - key: DOCUMENT_WORKER_SHARED_SECRET
         generateValue: true
+      - key: DOCUMENT_WORKER_REQUEST_SECRET
+        generateValue: true
       - key: R2_ENDPOINT_URL
         sync: false
       - key: R2_ACCESS_KEY_ID
@@ -53,5 +55,15 @@ services:
     dockerContext: .
     healthCheckPath: /health
     envVars:
+      - key: ENVIRONMENT
+        value: production
       - key: DOCUMENT_WORKER_SHARED_SECRET
+        sync: false
+      - key: DOCUMENT_WORKER_REQUEST_SECRET
+        sync: false
+      - key: DOCUMENT_TOKEN_SECRET
+        sync: false
+      - key: DOCUMENT_CALLBACK_BASE_URL
+        sync: false
+      - key: DOCUMENT_SOURCE_ORIGINS
         sync: false

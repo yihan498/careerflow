@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link } from './router'
 
 const workflow = [
   { number: '01', title: '建立个人事实库', text: '上传 PDF 或 Word 简历，确认教育、经历、成果与技能。后续内容只使用你确认过的事实。' },
@@ -103,6 +103,6 @@ export default function Landing() {
       </section>
     </main>
 
-    <footer className="landing-footer"><span>CareerFlow · 开源求职流程工具</span><a href="https://github.com/yihan498/careerflow" target="_blank" rel="noreferrer">查看 GitHub 项目</a></footer>
+    <footer className="landing-footer"><span>CareerFlow · 开源求职流程工具</span><span><Link to="/privacy">隐私与数据边界</Link> · <a href="https://github.com/yihan498/careerflow" target="_blank" rel="noreferrer">查看 GitHub 项目</a></span></footer>
   </div>
 }

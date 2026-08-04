@@ -121,6 +121,7 @@ class DocumentTokenClaims(BaseModel):
     job_id: str
     action: Literal["inspect", "build"]
     source_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    source_url_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
     exp: int
 
 

@@ -12,3 +12,7 @@ frontend/vite.config.d.ts
 coverage/
 runtime/
 *.sqlite3
+
+.vercel
+.env.local
+.env.*.local

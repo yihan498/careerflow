@@ -31,17 +31,24 @@ from .models import (
     ApprovalRow,
     CandidateProfileRow,
     DocumentJobRow,
+    DeletionJobRow,
+    TaskLeaseRow,
     ProviderCredentialRow,
     ResumeTemplateRow,
     ReviewRow,
 )
 from .maintenance import maintenance_loop
+from .leases import with_task_lease
 from .providers import ProviderClient, SPECS
 from .schemas import (
     ApplicationCreate,
     DraftEdit,
     DraftRequest,
     DocumentPlanRequest,
+    DocumentCompleteRequest,
+    DocumentConsumeRequest,
+    DocumentFailRequest,
+    DocumentUploadUrlRequest,
     InterviewRequest,
     ProfileConfirm,
     ProfileExtractRequest,
@@ -72,14 +79,14 @@ async def lifespan(app: FastAPI):
             pass
 
 
+settings = get_settings()
 app = FastAPI(
     title="CareerFlow Web API",
     version="0.1.0",
-    docs_url="/api/docs",
-    openapi_url="/api/openapi.json",
+    docs_url=None if settings.is_production else "/api/docs",
+    openapi_url=None if settings.is_production else "/api/openapi.json",
     lifespan=lifespan,
 )
-settings = get_settings()
 origins = settings.cors_origins or [settings.app_origin]
 app.add_middleware(
     CORSMiddleware,
@@ -188,9 +195,10 @@ async def save_provider(
     session: AsyncSession = Depends(get_session),
     service: WorkflowService = Depends(workflow),
 ):
+    normalized_base_url = service.providers.resolve_base_url(data.provider, data.base_url)
     await service.providers.test_connection(data.provider, data.api_key, data.base_url, data.model)
     row = await service.credentials.save(
-        session, user.id, data.session_id, data.provider, data.api_key, data.base_url, data.model, data.save
+        session, user.id, data.session_id, data.provider, data.api_key, normalized_base_url, data.model, data.save
     )
     await session.commit()
     return {"data": {"provider": row.provider, "saved": row.persistent, "last_four": row.key_last_four}}
@@ -224,7 +232,9 @@ async def upload_resume(
     session: AsyncSession = Depends(get_session),
     service: DocumentJobService = Depends(documents),
 ):
-    return {"data": await service.inspect_upload(session, user.id, file)}
+    return {"data": await with_task_lease(
+        session, user.id, "document", lambda: service.inspect_upload(session, user.id, file)
+    )}
 
 
 @app.post("/api/v1/profile/extract")
@@ -234,7 +244,9 @@ async def extract_profile(
     session: AsyncSession = Depends(get_session),
     service: WorkflowService = Depends(workflow),
 ):
-    return {"data": await service.extract_profile(session, user.id, data)}
+    return {"data": await with_task_lease(
+        session, user.id, "agent", lambda: service.extract_profile(session, user.id, data)
+    )}
 
 
 @app.post("/api/v1/profile/confirm")
@@ -274,10 +286,14 @@ async def get_application(
     service: WorkflowService = Depends(workflow),
 ):
     row = await service.application(session, user.id, app_id)
+    requires_document_plan = bool(await session.scalar(select(func.count()).select_from(ResumeTemplateRow).where(
+        ResumeTemplateRow.user_id == user.id
+    )))
     return {"data": {
         "id": row.id, "company": row.company, "role": row.role, "jd": row.jd, "stage": row.stage,
         "history": row.history, "draft_bundle": row.draft_bundle, "document_plan": row.document_plan,
         "active_output_version": row.active_output_version,
+        "requires_document_plan": requires_document_plan,
     }}
 
 
@@ -289,8 +305,11 @@ async def draft_application(
     session: AsyncSession = Depends(get_session),
     service: WorkflowService = Depends(workflow),
 ):
-    return {"data": await service.draft(
-        session, user.id, app_id, data.provider, data.session_id, data.idempotency_key
+    return {"data": await with_task_lease(
+        session,
+        user.id,
+        "agent",
+        lambda: service.draft(session, user.id, app_id, data.provider, data.session_id, data.idempotency_key),
     )}
 
 
@@ -314,8 +333,13 @@ async def create_document_plan(
     session: AsyncSession = Depends(get_session),
     service: WorkflowService = Depends(workflow),
 ):
-    return {"data": await service.generate_document_plan(
-        session, user.id, app_id, data.provider, data.session_id, data.idempotency_key, data.template_id
+    return {"data": await with_task_lease(
+        session,
+        user.id,
+        "agent",
+        lambda: service.generate_document_plan(
+            session, user.id, app_id, data.provider, data.session_id, data.idempotency_key, data.template_id
+        ),
     )}
 
 
@@ -350,10 +374,12 @@ async def build_application_document(
     application = await workflow_service.application(session, user.id, app_id)
     if application.stage != "approved" or not application.document_plan:
         raise PlatformError("stage_blocked", "An approved document plan is required.", 409)
-    version = await document_service.build_application_document(
-        session, user.id, app_id, application.document_plan
-    )
-    return {"data": await workflow_service.build(session, user.id, app_id, version)}
+    async def operation():
+        version = await document_service.build_application_document(
+            session, user.id, app_id, application.document_plan
+        )
+        return await workflow_service.build(session, user.id, app_id, version)
+    return {"data": await with_task_lease(session, user.id, "document", operation)}
 
 
 @app.get("/api/v1/applications/{app_id}/delivery")
@@ -385,7 +411,9 @@ async def prepare_interview(
     session: AsyncSession = Depends(get_session),
     service: WorkflowService = Depends(workflow),
 ):
-    return {"data": await service.interview(session, user.id, app_id, data)}
+    return {"data": await with_task_lease(
+        session, user.id, "agent", lambda: service.interview(session, user.id, app_id, data), ttl_seconds=900
+    )}
 
 
 @app.post("/api/v1/applications/{app_id}/review")
@@ -441,12 +469,12 @@ async def application_artifacts(
         select(ArtifactRow).where(
             ArtifactRow.application_id == app_id,
             ArtifactRow.user_id == user.id,
-            ArtifactRow.active.is_(True),
-        ).order_by(ArtifactRow.kind)
+        ).order_by(ArtifactRow.created_at.desc(), ArtifactRow.kind)
     )).scalars()
     return {"data": [{
         "id": row.id, "kind": row.kind, "size_bytes": row.size_bytes,
         "sha256": row.sha256, "content_type": row.content_type,
+        "active": row.active, "version_id": row.version_id, "created_at": row.created_at.isoformat(),
     } for row in rows]}
 
 
@@ -456,9 +484,27 @@ async def delete_account(
     user: CurrentUser = Depends(current_user),
     session: AsyncSession = Depends(get_session),
 ):
+    job = (await session.execute(select(DeletionJobRow).where(
+        DeletionJobRow.user_id == user.id,
+        DeletionJobRow.scope == "account",
+        DeletionJobRow.resource_id == "",
+    ))).scalar_one_or_none()
+    if not job:
+        job = DeletionJobRow(user_id=user.id, scope="account", resource_id="")
+        session.add(job)
+    job.status = "running"
+    job.attempts += 1
+    job.error_code = None
+    await session.commit()
     store: ObjectStore | None = request.app.state.store
-    if store:
-        await store.delete_prefix(f"users/{user.id}/")
+    try:
+        if store:
+            await store.delete_prefix(f"users/{user.id}/")
+    except Exception as exc:
+        job.status = "failed"
+        job.error_code = "object_storage_deletion"
+        await session.commit()
+        raise PlatformError("deletion_pending", "File deletion did not finish; the account remains available for retry.", 502) from exc
     await session.execute(delete(ReviewRow).where(ReviewRow.user_id == user.id))
     await session.execute(delete(ApprovalRow).where(ApprovalRow.user_id == user.id))
     await session.execute(delete(AgentRunRow).where(AgentRunRow.user_id == user.id))
@@ -468,6 +514,7 @@ async def delete_account(
     await session.execute(delete(ResumeTemplateRow).where(ResumeTemplateRow.user_id == user.id))
     await session.execute(delete(ApplicationRow).where(ApplicationRow.user_id == user.id))
     await session.execute(delete(CandidateProfileRow).where(CandidateProfileRow.user_id == user.id))
+    await session.execute(delete(TaskLeaseRow).where(TaskLeaseRow.user_id == user.id))
     await session.commit()
     settings = request.app.state.settings
     if settings.supabase_url and settings.supabase_service_role_key:
@@ -477,7 +524,12 @@ async def delete_account(
                 headers={"Authorization": f"Bearer {settings.supabase_service_role_key}", "apikey": settings.supabase_service_role_key},
             )
         if response.status_code >= 400 and response.status_code != 404:
+            job.status = "failed"
+            job.error_code = "auth_deletion"
+            await session.commit()
             raise PlatformError("auth_deletion_pending", "Application data was deleted, but account removal must be retried.", 502)
+    await session.delete(job)
+    await session.commit()
     return Response(status_code=204)
 
 
@@ -515,31 +567,50 @@ async def delete_application(
     ))).scalar_one_or_none()
     if not row:
         raise PlatformError("not_found", "Application not found.", 404)
+    job = (await session.execute(select(DeletionJobRow).where(
+        DeletionJobRow.user_id == user.id,
+        DeletionJobRow.scope == "application",
+        DeletionJobRow.resource_id == app_id,
+    ))).scalar_one_or_none()
+    if not job:
+        job = DeletionJobRow(user_id=user.id, scope="application", resource_id=app_id)
+        session.add(job)
+    job.status = "running"
+    job.attempts += 1
+    job.error_code = None
+    await session.commit()
     store: ObjectStore | None = request.app.state.store
-    if store:
-        await store.delete_prefix(f"users/{user.id}/applications/{app_id}/")
+    try:
+        if store:
+            await store.delete_prefix(f"users/{user.id}/applications/{app_id}/")
+    except Exception as exc:
+        job.status = "failed"
+        job.error_code = "object_storage_deletion"
+        await session.commit()
+        raise PlatformError("deletion_pending", "File deletion did not finish; retry the application deletion.", 502) from exc
     await session.delete(row)
+    await session.delete(job)
     await session.commit()
     return Response(status_code=204)
 
 
 @app.post("/api/internal/document-jobs/consume")
 async def consume_document_job(
-    body: dict,
+    body: DocumentConsumeRequest,
     x_worker_secret: str | None = Header(default=None),
     session: AsyncSession = Depends(get_session),
     service: DocumentJobService = Depends(documents),
     settings: Settings = Depends(get_settings),
 ):
     verify_worker_secret(x_worker_secret, settings)
-    row = await service.consume(session, str(body.get("token", "")))
+    row = await service.consume(session, body.token)
     return {"data": {"job_id": row.id, "action": row.action, "source_sha256": row.source_sha256}}
 
 
 @app.post("/api/internal/document-jobs/{job_id}/upload-url")
 async def document_output_url(
     job_id: str,
-    body: dict,
+    body: DocumentUploadUrlRequest,
     x_worker_secret: str | None = Header(default=None),
     session: AsyncSession = Depends(get_session),
     service: DocumentJobService = Depends(documents),
@@ -547,35 +618,35 @@ async def document_output_url(
 ):
     verify_worker_secret(x_worker_secret, settings)
     return {"data": await service.upload_url(
-        session, job_id, str(body.get("name", "")), str(body.get("content_type", "application/octet-stream"))
+        session, job_id, body.name, body.content_type
     )}
 
 
 @app.post("/api/internal/document-jobs/{job_id}/complete")
 async def complete_document_job(
     job_id: str,
-    body: dict,
+    body: DocumentCompleteRequest,
     x_worker_secret: str | None = Header(default=None),
     session: AsyncSession = Depends(get_session),
     service: DocumentJobService = Depends(documents),
     settings: Settings = Depends(get_settings),
 ):
     verify_worker_secret(x_worker_secret, settings)
-    await service.complete(session, job_id, list(body.get("files", [])), dict(body.get("result", {})))
+    await service.complete(session, job_id, [item.model_dump() for item in body.files], body.result)
     return {"data": {"status": "succeeded"}}
 
 
 @app.post("/api/internal/document-jobs/{job_id}/fail")
 async def fail_document_job(
     job_id: str,
-    body: dict,
+    body: DocumentFailRequest,
     x_worker_secret: str | None = Header(default=None),
     session: AsyncSession = Depends(get_session),
     service: DocumentJobService = Depends(documents),
     settings: Settings = Depends(get_settings),
 ):
     verify_worker_secret(x_worker_secret, settings)
-    await service.fail(session, job_id, str(body.get("error_code", "worker_failed")))
+    await service.fail(session, job_id, body.error_code)
     return {"data": {"status": "failed"}}
 
 

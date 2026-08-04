@@ -56,7 +56,11 @@ def validate_draft_bundle(drafts: dict[str, str]) -> None:
     )
 
 
-def validate_interview_brief(brief: str, require_sources: bool) -> None:
+def validate_interview_brief(
+    brief: str,
+    require_sources: bool,
+    allowed_evidence_ids: set[str] | None = None,
+) -> None:
     positions: list[int] = []
     for heading in INTERVIEW_SECTIONS:
         _require(brief.count(heading) == 1, f"Interview brief must contain exactly one '{heading}' section.")
@@ -70,9 +74,14 @@ def validate_interview_brief(brief: str, require_sources: bool) -> None:
         )
         _require("TODO" not in brief, "Online interview research cannot contain TODO placeholders.")
         _require(
-            any(label in brief for label in ("[Verified]", "[Inference]", "[Unknown]")),
+            any(label in brief for label in ("[Verified:", "[Inference]", "[Unknown]")),
             "Online interview findings must label their evidence status.",
         )
+    allowed = allowed_evidence_ids or set()
+    verified = re.findall(r"\[Verified:([A-Z0-9-]+)\]", brief)
+    malformed_verified = "[Verified]" in brief or bool(re.search(r"\[Verified:(?![A-Z0-9-]+\])", brief))
+    _require(not malformed_verified, "Verified claims must cite an evidence ID, for example [Verified:SRC-01].")
+    _require(all(item in allowed for item in verified), "Interview brief cites an unverified evidence ID.")
 
 
 def markdown_to_html(markdown: str, title: str) -> str:

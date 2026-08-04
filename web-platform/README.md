@@ -79,8 +79,8 @@ uvicorn api.main:app --reload
 
 - Supabase：`DATABASE_URL`、`SUPABASE_URL`、`SUPABASE_JWKS_URL`、`SUPABASE_SERVICE_ROLE_KEY`
 - R2：endpoint、access key、secret、bucket、region；桶必须私有
-- 安全密钥：32 字节 base64 的 `CREDENTIAL_MASTER_KEY`，以及彼此不同的 document token/shared secret
-- Worker：公网 URL 与 API callback URL
+- 安全密钥：32 字节 base64 的 `CREDENTIAL_MASTER_KEY`，以及彼此不同的 document token、Worker callback secret 和 API→Worker request secret
+- Worker：公网 URL 与固定 API callback URL；每次 R2 签名下载 URL 的完整哈希会绑定进一次性任务令牌
 - Turnstile：站点和服务端密钥
 - 前端构建：`VITE_SUPABASE_URL`、`VITE_SUPABASE_ANON_KEY`、`VITE_TURNSTILE_SITE_KEY`
 - Supabase Auth：配置 Resend SMTP，不能依赖默认邮件服务面向公众发信
@@ -94,9 +94,12 @@ python -m pytest
 Set-Location frontend
 npm test -- --run
 npm run build
+npm audit --omit=dev --audit-level=high
 Set-Location ..
 powershell -ExecutionPolicy Bypass -File scripts/verify-isolation.ps1
 ```
+
+`deploy/ci-web-platform.yml` 是完整 Web 检查模板。仓库维护者启用时应将它合并到仓库根 `.github/workflows/`；模板保留在 `web-platform/` 内，以遵守本子项目不改动原工程的隔离边界。
 
 真实模型 API 测试必须显式启用，CI 默认只运行模拟契约测试，不读取真实 Key。原仓库测试仍应从仓库根目录按原 README 执行。
 
@@ -104,7 +107,7 @@ powershell -ExecutionPolicy Bypass -File scripts/verify-isolation.ps1
 
 `deploy/render.yaml` 创建 web-api 和 document-worker 两个 Render 免费服务。数据库用 Supabase，私有文件用 Cloudflare R2，验证邮件用 Resend，滥用防护用 Turnstile。
 
-正式部署前仍需由项目所有者提供子域名并创建以上免费账户，然后逐项填入 Render 环境变量、执行 `migrations/001_initial.sql`、限制 worker 的 R2 凭证只能访问明确对象、配置 DNS 和 Supabase redirect URL。无需购买付费服务。
+正式部署前仍需由项目所有者提供子域名并创建以上免费账户，然后逐项填入环境变量、先执行 `migrations/001_initial.sql`、限制 worker 只能访问明确对象、配置 DNS 和 Supabase redirect URL。`002_deletion_jobs.sql` 是纯增量幂等迁移，生产 API 启动时会使用 PostgreSQL advisory lock 自动应用。Worker 必须额外配置 `DOCUMENT_WORKER_REQUEST_SECRET`、`DOCUMENT_TOKEN_SECRET` 与 `DOCUMENT_CALLBACK_BASE_URL`，并在安全升级后轮换原 `DOCUMENT_WORKER_SHARED_SECRET`。`DOCUMENT_SOURCE_ORIGINS` 是可选的额外 Origin 白名单。无需购买付费服务。
 
 Render 免费服务存在冷启动、休眠和资源限制，本项目明确定位为免费测试版，不承诺生产级 SLA。开放注册必须经过虚构资料全链路验收、少量受控用户测试、容量/错误率/安全检查三个发布门槛。
 

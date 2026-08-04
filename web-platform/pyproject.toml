@@ -25,6 +25,12 @@ dependencies = [
 documents = ["PyMuPDF>=1.24,<2", "Pillow>=10,<12", "reportlab>=4,<5"]
 dev = ["pytest>=8,<9", "pytest-asyncio>=0.24,<1", "respx>=0.21,<1"]
 
+[project.scripts]
+app = "api.main:app"
+
+[tool.vercel.scripts]
+build = "npm --prefix frontend ci && npm --prefix frontend run build"
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["api*", "shared*", "document_worker*"]
@@ -32,4 +38,3 @@ include = ["api*", "shared*", "document_worker*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-

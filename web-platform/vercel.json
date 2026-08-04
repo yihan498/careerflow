@@ -1,0 +1,12 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "fastapi",
+  "regions": ["sin1"],
+  "functions": {
+    "api/main.py": {
+      "maxDuration": 300,
+      "memory": 2048,
+      "excludeFiles": "{tests/**,runtime/**,document-worker/**,frontend/node_modules/**}"
+    }
+  }
+}

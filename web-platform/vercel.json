@@ -1,13 +1,18 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "framework": "fastapi",
+  "framework": "vite",
+  "buildCommand": "npm --prefix frontend ci && npm --prefix frontend run build",
+  "outputDirectory": "frontend/dist",
   "regions": ["sin1"],
   "functions": {
     "api/main.py": {
       "maxDuration": 300,
       "memory": 2048,
-      "includeFiles": "frontend/dist/**",
       "excludeFiles": "{tests/**,runtime/**,document-worker/**,frontend/node_modules/**}"
     }
-  }
+  },
+  "rewrites": [
+    {"source": "/api/(.*)", "destination": "/api/main.py"},
+    {"source": "/(.*)", "destination": "/index.html"}
+  ]
 }

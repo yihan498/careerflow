@@ -50,9 +50,10 @@ async def apply_migrations(connection: AsyncConnection, migrations: list[Path]) 
 
 async def init_db() -> None:
     if settings.is_production:
-        migration_dir = Path(__file__).resolve().parents[1] / "migrations"
-        async with engine.begin() as connection:
-            await apply_migrations(connection, sorted(migration_dir.glob("*.sql")))
+        # Production uses a least-privilege runtime role. Schema changes are a
+        # separate deployment operation and must never make every request fail.
+        async with engine.connect() as connection:
+            await connection.exec_driver_sql("select 1")
         return
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)

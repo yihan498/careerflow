@@ -107,7 +107,7 @@ powershell -ExecutionPolicy Bypass -File scripts/verify-isolation.ps1
 
 `deploy/render.yaml` 创建 web-api 和 document-worker 两个 Render 免费服务。数据库用 Supabase，私有文件用 Cloudflare R2，验证邮件用 Resend，滥用防护用 Turnstile。
 
-正式部署前仍需由项目所有者提供子域名并创建以上免费账户，然后逐项填入环境变量、先执行 `migrations/001_initial.sql`、限制 worker 只能访问明确对象、配置 DNS 和 Supabase redirect URL。`002_deletion_jobs.sql` 是纯增量幂等迁移，生产 API 启动时会使用 PostgreSQL advisory lock 自动应用。Worker 必须额外配置 `DOCUMENT_WORKER_REQUEST_SECRET`、`DOCUMENT_TOKEN_SECRET` 与 `DOCUMENT_CALLBACK_BASE_URL`，并在安全升级后轮换原 `DOCUMENT_WORKER_SHARED_SECRET`。`DOCUMENT_SOURCE_ORIGINS` 是可选的额外 Origin 白名单。无需购买付费服务。
+正式部署前仍需由项目所有者提供子域名并创建以上免费账户，然后逐项填入环境变量、限制 worker 只能访问明确对象、配置 DNS 和 Supabase redirect URL。数据库迁移与 API 运行账号严格分离：使用短时、具有 DDL 权限的 Supabase PostgreSQL 连接设置 `MIGRATION_DATABASE_URL`，运行 `python scripts/migrate.py`；生产 `DATABASE_URL` 只保留应用读写权限，API 启动时不会建表或改表。Worker 必须额外配置 `DOCUMENT_WORKER_REQUEST_SECRET`、`DOCUMENT_TOKEN_SECRET` 与 `DOCUMENT_CALLBACK_BASE_URL`，并在安全升级后轮换原 `DOCUMENT_WORKER_SHARED_SECRET`。`DOCUMENT_SOURCE_ORIGINS` 是可选的额外 Origin 白名单。无需购买付费服务。
 
 Render 免费服务存在冷启动、休眠和资源限制，本项目明确定位为免费测试版，不承诺生产级 SLA。开放注册必须经过虚构资料全链路验收、少量受控用户测试、容量/错误率/安全检查三个发布门槛。
 

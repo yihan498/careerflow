@@ -1,7 +1,9 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
+import api.db as db
 from api.db import apply_migrations, migration_statements
 
 
@@ -41,3 +43,26 @@ async def test_migrations_use_transaction_lock_and_separate_statements(tmp_path:
     assert "create table one (id text)" in connection.driver_sql
     assert "create index two on one(id)" in connection.driver_sql
     assert connection.executed[-1][1] == {"version": "001_test.sql"}
+
+
+@pytest.mark.asyncio
+async def test_production_startup_uses_runtime_role_for_connectivity_only(monkeypatch):
+    connection = Connection()
+
+    class Context:
+        async def __aenter__(self):
+            return connection
+
+        async def __aexit__(self, *_):
+            return None
+
+    class Engine:
+        def connect(self):
+            return Context()
+
+    monkeypatch.setattr(db, "settings", SimpleNamespace(is_production=True))
+    monkeypatch.setattr(db, "engine", Engine())
+
+    await db.init_db()
+
+    assert connection.driver_sql == ["select 1"]

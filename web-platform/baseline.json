@@ -1,0 +1,5 @@
+{
+  "base_commit": "871508ff40b19d5ce7813a8aab88e77ca118702e",
+  "base_tree": "cdfc390106a7c4566cedce96652aef088e7f4ac6",
+  "scope_rule": "All implementation changes must remain under web-platform/."
+}

@@ -1,0 +1,62 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: careerflow
+      POSTGRES_PASSWORD: local-development-only
+      POSTGRES_DB: careerflow
+    volumes: ["postgres-data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U careerflow"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: careerflow
+      MINIO_ROOT_PASSWORD: careerflow-local-only
+    volumes: ["minio-data:/data"]
+    ports: ["9001:9001"]
+  minio-init:
+    image: minio/mc:latest
+    depends_on: [minio]
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["until mc alias set local http://minio:9000 careerflow careerflow-local-only; do sleep 2; done; mc mb --ignore-existing local/careerflow-private"]
+  api:
+    build:
+      context: ..
+      dockerfile: web-platform/deploy/api.Dockerfile
+      args:
+        VITE_SUPABASE_URL: ""
+        VITE_SUPABASE_ANON_KEY: ""
+    environment:
+      ENVIRONMENT: development
+      APP_ORIGIN: http://localhost:8000
+      DATABASE_URL: postgresql+asyncpg://careerflow:local-development-only@postgres:5432/careerflow
+      R2_ENDPOINT_URL: http://minio:9000
+      R2_ACCESS_KEY_ID: careerflow
+      R2_SECRET_ACCESS_KEY: careerflow-local-only
+      R2_BUCKET: careerflow-private
+      CREDENTIAL_MASTER_KEY: development-only-credential-key-change-me
+      DOCUMENT_TOKEN_SECRET: development-only-document-token-secret-change-me
+      DOCUMENT_WORKER_SHARED_SECRET: development-only-worker-secret
+      DOCUMENT_WORKER_URL: http://document-worker:8081
+      DOCUMENT_CALLBACK_BASE_URL: http://api:8000
+      DEV_AUTH_BYPASS: "true"
+    depends_on:
+      postgres: { condition: service_healthy }
+      minio-init: { condition: service_completed_successfully }
+    ports: ["8000:8000"]
+  document-worker:
+    build:
+      context: ..
+      dockerfile: web-platform/deploy/document-worker.Dockerfile
+    environment:
+      DOCUMENT_WORKER_SHARED_SECRET: development-only-worker-secret
+    depends_on: [api]
+volumes:
+  postgres-data:
+  minio-data:
+

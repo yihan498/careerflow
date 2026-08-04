@@ -1,0 +1,57 @@
+services:
+  - type: web
+    name: careerflow-web-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./web-platform/deploy/api.Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: APP_ORIGIN
+        sync: false
+      - key: DOCUMENT_WORKER_URL
+        sync: false
+      - key: DOCUMENT_CALLBACK_BASE_URL
+        sync: false
+      - key: CREDENTIAL_MASTER_KEY
+        generateValue: true
+      - key: DOCUMENT_TOKEN_SECRET
+        generateValue: true
+      - key: DOCUMENT_WORKER_SHARED_SECRET
+        generateValue: true
+      - key: R2_ENDPOINT_URL
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        sync: false
+      - key: R2_REGION
+        value: auto
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_JWKS_URL
+        sync: false
+      - key: SUPABASE_JWT_AUDIENCE
+        value: authenticated
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: TURNSTILE_SECRET_KEY
+        sync: false
+      - key: DEV_AUTH_BYPASS
+        value: false
+  - type: web
+    name: careerflow-document-worker
+    runtime: docker
+    plan: free
+    dockerfilePath: ./web-platform/deploy/document-worker.Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    envVars:
+      - key: DOCUMENT_WORKER_SHARED_SECRET
+        sync: false

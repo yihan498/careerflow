@@ -1,4 +1,5 @@
 import { FormEvent, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Turnstile } from '@marsidev/react-turnstile'
 import { supabase } from './lib'
 import { Button, Field, Notice } from './components'
@@ -24,12 +25,13 @@ export default function Auth() {
 
   return <main className="auth-shell">
     <section className="auth-copy">
-      <div className="brand">CareerFlow</div>
+      <Link to="/" className="brand auth-brand">CareerFlow</Link>
       <h1>让每一次求职，都留下可以复用的经验。</h1>
       <p>从JD、简历和求职信，到面试调研与复盘。每个岗位独立记录，每一步都由你确认。</p>
       <ul><li>使用你自己的模型API Key</li><li>保留原有PDF或Word格式</li><li>不会替你自动发送邮件</li></ul>
     </section>
     <form className="auth-card" onSubmit={submit}>
+      <Link to="/" className="auth-back">← 返回主页</Link>
       <h2>{mode === 'signin' ? '登录' : '创建账户'}</h2>
       <Field label="邮箱"><input type="email" required value={email} onChange={e => setEmail(e.target.value)} /></Field>
       <Field label="密码" hint="至少8位，建议使用独立密码"><input type="password" minLength={8} required value={password} onChange={e => setPassword(e.target.value)} /></Field>
@@ -42,4 +44,3 @@ export default function Auth() {
     </form>
   </main>
 }
-

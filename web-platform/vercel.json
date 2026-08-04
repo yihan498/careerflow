@@ -6,6 +6,7 @@
     "api/main.py": {
       "maxDuration": 300,
       "memory": 2048,
+      "includeFiles": "frontend/dist/**",
       "excludeFiles": "{tests/**,runtime/**,document-worker/**,frontend/node_modules/**}"
     }
   }

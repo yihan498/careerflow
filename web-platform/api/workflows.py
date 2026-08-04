@@ -13,11 +13,6 @@ from typing import Any
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from careerflow.contracts import validate_draft_bundle, validate_interview_brief
-from careerflow.core import markdown_to_html
-from careerflow.email_delivery import extract_jd_emails, safe_attachment_name
-from careerflow.pdf_export import export_pdf
-
 from shared.contracts import (
     CandidateProfile,
     DraftBundle,
@@ -27,6 +22,14 @@ from shared.contracts import (
     Stage,
     canonical_hash,
     require_transition,
+)
+from shared.careerflow_compat import (
+    export_pdf,
+    extract_jd_emails,
+    markdown_to_html,
+    safe_attachment_name,
+    validate_draft_bundle,
+    validate_interview_brief,
 )
 from shared.errors import ConflictError, NotFoundError, PlatformError
 

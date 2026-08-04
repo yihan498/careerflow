@@ -1,4 +1,4 @@
-import { FormEvent, useState } from 'react'
+import { FormEvent, useEffect, useState } from 'react'
 import { Link } from './router'
 import { Turnstile } from '@marsidev/react-turnstile'
 import { supabase } from './lib'
@@ -11,7 +11,15 @@ export default function Auth() {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin')
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [compactCaptcha, setCompactCaptcha] = useState(() => window.matchMedia('(max-width: 360px)').matches)
   const siteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 360px)')
+    const update = () => setCompactCaptcha(media.matches)
+    media.addEventListener('change', update)
+    return () => media.removeEventListener('change', update)
+  }, [])
 
   async function submit(event: FormEvent) {
     event.preventDefault(); setError(''); setMessage('')
@@ -36,7 +44,7 @@ export default function Auth() {
       <h2>{mode === 'signin' ? '登录' : '创建账户'}</h2>
       <Field label="邮箱"><input type="email" required value={email} onChange={e => setEmail(e.target.value)} /></Field>
       <Field label="密码" hint="至少8位，建议使用独立密码"><input type="password" minLength={8} required value={password} onChange={e => setPassword(e.target.value)} /></Field>
-      {siteKey && <Turnstile siteKey={siteKey} onSuccess={setCaptcha} />}
+      {siteKey && <Turnstile key={compactCaptcha ? 'compact' : 'normal'} siteKey={siteKey} options={{ size: compactCaptcha ? 'compact' : 'normal' }} onSuccess={setCaptcha} />}
       {error && <Notice tone="error">{error}</Notice>}{message && <Notice tone="success">{message}</Notice>}
       <Button type="submit" disabled={Boolean(siteKey && !captcha)}>{mode === 'signin' ? '登录' : '注册并验证邮箱'}</Button>
       <button type="button" className="text-button" onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')}>
